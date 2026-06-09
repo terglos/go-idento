@@ -16,6 +16,7 @@ business logic.
 **Docs:** [getting started](docs/getting-started.md) ·
 [architecture](docs/architecture.md) ·
 [extending the user & migrations](docs/design/extending-user-and-migrations.md) ·
+[customizing the schema](docs/customizing-schema.md) ·
 [contributor/agent guide](CLAUDE.md)
 
 ## Why
@@ -155,6 +156,8 @@ EF `add-migration` loop. goose / golang-migrate can run the same SQL.
 - [x] Account lockout
 - [x] Policy/claims authorization (`auth.Policy`, `RequirePolicy`) beyond roles
 - [x] Stores: GORM (Postgres/MySQL/SQLite), raw `pgx`, **sqlc-generated** pgx, in-memory
+- [x] **Configurable schema**: custom namespace / table prefix / table names per store
+  (`WithSchema`/`WithTablePrefix`/`WithTableNames`) + `ON DELETE CASCADE` integrity ([docs](docs/customizing-schema.md))
 - [x] **Extensible user**: custom columns via the generic `UserManagerOf[T]`
   (embed `identity.User`), a JSON `Attributes` bag, an extension table, or claims
 - [x] **Migrations**: zero-CLI `migrations.ApplyPostgres`, plus Atlas config for

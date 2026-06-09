@@ -2,6 +2,8 @@ package gormstore
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/terglos/go-idento/identity"
@@ -12,36 +14,57 @@ import (
 // GenericUserStore is a GORM user store for a custom user type T that embeds
 // identity.User (and therefore satisfies identity.UserModel via Base()). It is
 // what enables the generic UserManagerOf[T] to persist custom columns on the
-// user row.
-//
-// Because the embedded *User promotes TableName() ("identity_users"), the custom
-// type maps to the same users table with the extra fields as additional columns.
-type GenericUserStore[T any, PT identity.Ptr[T]] struct{ db *gorm.DB }
+// user row. Schema/table names are configurable via the same options as the
+// concrete store.
+type GenericUserStore[T any, PT identity.Ptr[T]] struct {
+	db *gorm.DB
+	t  tables
+}
 
 // NewUserStoreOf builds a generic user store for T.
-func NewUserStoreOf[T any, PT identity.Ptr[T]](db *gorm.DB) *GenericUserStore[T, PT] {
-	return &GenericUserStore[T, PT]{db: db}
+func NewUserStoreOf[T any, PT identity.Ptr[T]](db *gorm.DB, opts ...Option) *GenericUserStore[T, PT] {
+	return &GenericUserStore[T, PT]{db: db, t: resolveTables(resolve(opts...))}
 }
 
 // MigrateOf creates/updates the custom user table plus the shared satellite
-// tables (roles, claims, tokens, logins).
-func MigrateOf[T any](db *gorm.DB) error {
-	return db.AutoMigrate(
-		new(T), &identity.Role{}, &identity.UserRole{},
-		&identity.UserClaim{}, &identity.RoleClaim{},
-		&identity.UserLogin{}, &identity.UserToken{},
-	)
+// tables (roles, claims, tokens, logins), honoring schema/prefix options.
+func MigrateOf[T any](db *gorm.DB, opts ...Option) error {
+	n := resolve(opts...)
+	if n.Schema != "" {
+		if err := db.Exec("CREATE SCHEMA IF NOT EXISTS " + n.Schema).Error; err != nil {
+			return err
+		}
+	}
+	t := resolveTables(n)
+	if err := db.Table(t.users).AutoMigrate(new(T)); err != nil {
+		return err
+	}
+	steps := []struct {
+		name  string
+		model any
+	}{
+		{t.roles, &identity.Role{}}, {t.userRoles, &identity.UserRole{}},
+		{t.userClaims, &identity.UserClaim{}}, {t.roleClaims, &identity.RoleClaim{}},
+		{t.userLogins, &identity.UserLogin{}}, {t.userTokens, &identity.UserToken{}},
+	}
+	for _, s := range steps {
+		if err := db.Table(s.name).AutoMigrate(s.model); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *GenericUserStore[T, PT]) Create(ctx context.Context, u PT) error {
-	return s.db.WithContext(ctx).Create(u).Error
+	return s.db.WithContext(ctx).Table(s.t.users).Create(u).Error
 }
 
 func (s *GenericUserStore[T, PT]) Update(ctx context.Context, u PT) error {
 	b := u.Base()
 	old := b.ConcurrencyStamp
 	b.ConcurrencyStamp = identity.NewConcurrencyStamp()
-	res := s.db.WithContext(ctx).Model(u).Where("concurrency_stamp = ?", old).Select("*").Updates(u)
+	res := s.db.WithContext(ctx).Table(s.t.users).
+		Where("id = ? AND concurrency_stamp = ?", b.ID, old).Select("*").Updates(u)
 	if res.Error != nil {
 		b.ConcurrencyStamp = old
 		return res.Error
@@ -49,7 +72,7 @@ func (s *GenericUserStore[T, PT]) Update(ctx context.Context, u PT) error {
 	if res.RowsAffected == 0 {
 		b.ConcurrencyStamp = old
 		var count int64
-		s.db.WithContext(ctx).Model(u).Where("id = ?", b.ID).Count(&count)
+		s.db.WithContext(ctx).Table(s.t.users).Where("id = ?", b.ID).Count(&count)
 		if count == 0 {
 			return identity.ErrNotFound
 		}
@@ -59,12 +82,12 @@ func (s *GenericUserStore[T, PT]) Update(ctx context.Context, u PT) error {
 }
 
 func (s *GenericUserStore[T, PT]) Delete(ctx context.Context, u PT) error {
-	return s.db.WithContext(ctx).Delete(u).Error
+	return s.db.WithContext(ctx).Table(s.t.users).Where("id = ?", u.Base().ID).Delete(u).Error
 }
 
 func (s *GenericUserStore[T, PT]) find(ctx context.Context, where string, arg any) (PT, error) {
 	var x T
-	if err := s.db.WithContext(ctx).First(&x, where, arg).Error; err != nil {
+	if err := s.db.WithContext(ctx).Table(s.t.users).Where(where, arg).Take(&x).Error; err != nil {
 		return nil, mapNotFound(err)
 	}
 	return PT(&x), nil
@@ -85,7 +108,7 @@ func (s *GenericUserStore[T, PT]) FindByEmail(ctx context.Context, e string) (PT
 // ListUsers implements identity.UserLister for the custom user type.
 func (s *GenericUserStore[T, PT]) ListUsers(ctx context.Context, f identity.ListFilter) ([]PT, int64, error) {
 	filtered := func() *gorm.DB {
-		q := s.db.WithContext(ctx).Model(new(T))
+		q := s.db.WithContext(ctx).Table(s.t.users)
 		if f.Search != "" {
 			like := "%" + strings.ToUpper(f.Search) + "%"
 			q = q.Where("normalized_user_name LIKE ? OR normalized_email LIKE ?", like, like)
@@ -111,7 +134,7 @@ func (s *GenericUserStore[T, PT]) ListUsers(ctx context.Context, f identity.List
 
 func (s *GenericUserStore[T, PT]) roleIDByName(ctx context.Context, name string) (string, error) {
 	var r identity.Role
-	if err := s.db.WithContext(ctx).First(&r, "normalized_name = ?", name).Error; err != nil {
+	if err := s.db.WithContext(ctx).Table(s.t.roles).Where("normalized_name = ?", name).Take(&r).Error; err != nil {
 		return "", mapNotFound(err)
 	}
 	return r.ID, nil
@@ -122,7 +145,7 @@ func (s *GenericUserStore[T, PT]) AddToRole(ctx context.Context, u PT, normalize
 	if err != nil {
 		return err
 	}
-	return s.db.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).
+	return s.db.WithContext(ctx).Table(s.t.userRoles).Clauses(clause.OnConflict{DoNothing: true}).
 		Create(&identity.UserRole{UserID: u.Base().ID, RoleID: rid}).Error
 }
 
@@ -131,31 +154,27 @@ func (s *GenericUserStore[T, PT]) RemoveFromRole(ctx context.Context, u PT, norm
 	if err != nil {
 		return err
 	}
-	return s.db.WithContext(ctx).Where("user_id = ? AND role_id = ?", u.Base().ID, rid).
-		Delete(&identity.UserRole{}).Error
+	return s.db.WithContext(ctx).Table(s.t.userRoles).
+		Where("user_id = ? AND role_id = ?", u.Base().ID, rid).Delete(&identity.UserRole{}).Error
 }
 
 func (s *GenericUserStore[T, PT]) GetRoles(ctx context.Context, u PT) ([]string, error) {
 	var names []string
-	err := s.db.WithContext(ctx).Model(&identity.Role{}).
-		Joins("JOIN identity_user_roles ur ON ur.role_id = identity_roles.id").
-		Where("ur.user_id = ?", u.Base().ID).
-		Pluck("identity_roles.name", &names).Error
+	sql := fmt.Sprintf(`SELECT r.name FROM %s r JOIN %s ur ON ur.role_id = r.id WHERE ur.user_id = ?`, s.t.roles, s.t.userRoles)
+	err := s.db.WithContext(ctx).Raw(sql, u.Base().ID).Scan(&names).Error
 	return names, err
 }
 
 func (s *GenericUserStore[T, PT]) IsInRole(ctx context.Context, u PT, normalizedRoleName string) (bool, error) {
 	var count int64
-	err := s.db.WithContext(ctx).Model(&identity.UserRole{}).
-		Joins("JOIN identity_roles r ON r.id = identity_user_roles.role_id").
-		Where("identity_user_roles.user_id = ? AND r.normalized_name = ?", u.Base().ID, normalizedRoleName).
-		Count(&count).Error
+	sql := fmt.Sprintf(`SELECT count(*) FROM %s ur JOIN %s r ON r.id = ur.role_id WHERE ur.user_id = ? AND r.normalized_name = ?`, s.t.userRoles, s.t.roles)
+	err := s.db.WithContext(ctx).Raw(sql, u.Base().ID, normalizedRoleName).Scan(&count).Error
 	return count > 0, err
 }
 
 func (s *GenericUserStore[T, PT]) GetClaims(ctx context.Context, u PT) ([]identity.Claim, error) {
 	var rows []identity.UserClaim
-	if err := s.db.WithContext(ctx).Where("user_id = ?", u.Base().ID).Find(&rows).Error; err != nil {
+	if err := s.db.WithContext(ctx).Table(s.t.userClaims).Where("user_id = ?", u.Base().ID).Find(&rows).Error; err != nil {
 		return nil, err
 	}
 	claims := make([]identity.Claim, len(rows))
@@ -170,14 +189,15 @@ func (s *GenericUserStore[T, PT]) AddClaims(ctx context.Context, u PT, claims []
 	for i, c := range claims {
 		rows[i] = identity.UserClaim{UserID: u.Base().ID, ClaimType: c.Type, ClaimValue: c.Value}
 	}
-	return s.db.WithContext(ctx).Create(&rows).Error
+	return s.db.WithContext(ctx).Table(s.t.userClaims).Create(&rows).Error
 }
 
 func (s *GenericUserStore[T, PT]) RemoveClaims(ctx context.Context, u PT, claims []identity.Claim) error {
 	id := u.Base().ID
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		for _, c := range claims {
-			if err := tx.Where("user_id = ? AND claim_type = ? AND claim_value = ?", id, c.Type, c.Value).
+			if err := tx.Table(s.t.userClaims).
+				Where("user_id = ? AND claim_type = ? AND claim_value = ?", id, c.Type, c.Value).
 				Delete(&identity.UserClaim{}).Error; err != nil {
 				return err
 			}
@@ -188,9 +208,9 @@ func (s *GenericUserStore[T, PT]) RemoveClaims(ctx context.Context, u PT, claims
 
 func (s *GenericUserStore[T, PT]) GetToken(ctx context.Context, u PT, loginProvider, name string) (string, error) {
 	var t identity.UserToken
-	err := s.db.WithContext(ctx).
-		First(&t, "user_id = ? AND login_provider = ? AND name = ?", u.Base().ID, loginProvider, name).Error
-	if err == gorm.ErrRecordNotFound {
+	err := s.db.WithContext(ctx).Table(s.t.userTokens).
+		Where("user_id = ? AND login_provider = ? AND name = ?", u.Base().ID, loginProvider, name).Take(&t).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return "", nil
 	}
 	if err != nil {
@@ -200,33 +220,36 @@ func (s *GenericUserStore[T, PT]) GetToken(ctx context.Context, u PT, loginProvi
 }
 
 func (s *GenericUserStore[T, PT]) SetToken(ctx context.Context, u PT, loginProvider, name, value string) error {
-	return s.db.WithContext(ctx).Save(&identity.UserToken{
+	return s.db.WithContext(ctx).Table(s.t.userTokens).Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "user_id"}, {Name: "login_provider"}, {Name: "name"}},
+		DoUpdates: clause.AssignmentColumns([]string{"value"}),
+	}).Create(&identity.UserToken{
 		UserID: u.Base().ID, LoginProvider: loginProvider, Name: name, Value: value,
 	}).Error
 }
 
 func (s *GenericUserStore[T, PT]) RemoveToken(ctx context.Context, u PT, loginProvider, name string) error {
-	return s.db.WithContext(ctx).
+	return s.db.WithContext(ctx).Table(s.t.userTokens).
 		Where("user_id = ? AND login_provider = ? AND name = ?", u.Base().ID, loginProvider, name).
 		Delete(&identity.UserToken{}).Error
 }
 
 func (s *GenericUserStore[T, PT]) AddLogin(ctx context.Context, u PT, login identity.UserLoginInfo) error {
-	return s.db.WithContext(ctx).Create(&identity.UserLogin{
+	return s.db.WithContext(ctx).Table(s.t.userLogins).Create(&identity.UserLogin{
 		LoginProvider: login.LoginProvider, ProviderKey: login.ProviderKey,
 		ProviderDisplayName: login.ProviderDisplayName, UserID: u.Base().ID,
 	}).Error
 }
 
 func (s *GenericUserStore[T, PT]) RemoveLogin(ctx context.Context, u PT, loginProvider, providerKey string) error {
-	return s.db.WithContext(ctx).
+	return s.db.WithContext(ctx).Table(s.t.userLogins).
 		Where("user_id = ? AND login_provider = ? AND provider_key = ?", u.Base().ID, loginProvider, providerKey).
 		Delete(&identity.UserLogin{}).Error
 }
 
 func (s *GenericUserStore[T, PT]) GetLogins(ctx context.Context, u PT) ([]identity.UserLoginInfo, error) {
 	var rows []identity.UserLogin
-	if err := s.db.WithContext(ctx).Where("user_id = ?", u.Base().ID).Find(&rows).Error; err != nil {
+	if err := s.db.WithContext(ctx).Table(s.t.userLogins).Where("user_id = ?", u.Base().ID).Find(&rows).Error; err != nil {
 		return nil, err
 	}
 	out := make([]identity.UserLoginInfo, len(rows))
@@ -238,8 +261,8 @@ func (s *GenericUserStore[T, PT]) GetLogins(ctx context.Context, u PT) ([]identi
 
 func (s *GenericUserStore[T, PT]) FindByLogin(ctx context.Context, loginProvider, providerKey string) (PT, error) {
 	var login identity.UserLogin
-	if err := s.db.WithContext(ctx).
-		First(&login, "login_provider = ? AND provider_key = ?", loginProvider, providerKey).Error; err != nil {
+	if err := s.db.WithContext(ctx).Table(s.t.userLogins).
+		Where("login_provider = ? AND provider_key = ?", loginProvider, providerKey).Take(&login).Error; err != nil {
 		return nil, mapNotFound(err)
 	}
 	return s.FindByID(ctx, login.UserID)

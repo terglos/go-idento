@@ -116,3 +116,63 @@ func TestPgxIntegration(t *testing.T) {
 		t.Fatalf("list users: err=%v total=%d page=%d", err, total, len(page))
 	}
 }
+
+// TestPgxCustomSchemaAndPrefix verifies a fully custom physical layout (custom
+// schema + table prefix) works end to end, and that ON DELETE CASCADE keeps
+// referential integrity. Runs only when GOIDENTITY_PG_DSN is set.
+func TestPgxCustomSchemaAndPrefix(t *testing.T) {
+	dsn := os.Getenv("GOIDENTITY_PG_DSN")
+	if dsn == "" {
+		t.Skip("set GOIDENTITY_PG_DSN to run the pgx custom-schema test")
+	}
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, dsn)
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	defer pool.Close()
+
+	opts := []pgxstore.Option{pgxstore.WithSchema("idflex"), pgxstore.WithTablePrefix("app_")}
+	_, _ = pool.Exec(ctx, "DROP SCHEMA IF EXISTS idflex CASCADE")
+	if err := pgxstore.Migrate(ctx, pool, opts...); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	t.Cleanup(func() { _, _ = pool.Exec(ctx, "DROP SCHEMA IF EXISTS idflex CASCADE") })
+
+	// Tables must exist under idflex with the app_ prefix.
+	var exists bool
+	if err := pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM information_schema.tables
+		WHERE table_schema='idflex' AND table_name='app_identity_users')`).Scan(&exists); err != nil || !exists {
+		t.Fatalf("expected table idflex.app_identity_users to exist (err=%v exists=%v)", err, exists)
+	}
+
+	um := identity.NewUserManager(pgxstore.NewUserStore(pool, opts...), identity.DefaultOptions())
+	rm := identity.NewRoleManager(pgxstore.NewRoleStore(pool, opts...))
+
+	if err := rm.Create(ctx, &identity.Role{Name: "Admin"}); err != nil {
+		t.Fatalf("create role: %v", err)
+	}
+	u := &identity.User{UserName: "flex"}
+	u.SetAttribute("tenant", "acme")
+	if err := um.CreateWithPassword(ctx, u, "Abcdef1!"); err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+	if err := um.AddToRole(ctx, u, "Admin"); err != nil {
+		t.Fatalf("add role: %v", err)
+	}
+	if in, _ := um.IsInRole(ctx, u, "Admin"); !in {
+		t.Fatal("expected user in Admin role (join across renamed tables)")
+	}
+
+	// Referential integrity: deleting the user cascades to the membership row.
+	if err := um.Store.Delete(ctx, u); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	var memberships int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM idflex.app_identity_user_roles WHERE user_id=$1`, u.ID).Scan(&memberships); err != nil {
+		t.Fatalf("count memberships: %v", err)
+	}
+	if memberships != 0 {
+		t.Fatalf("ON DELETE CASCADE failed: %d orphan membership rows", memberships)
+	}
+}
