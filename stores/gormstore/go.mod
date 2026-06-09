@@ -4,7 +4,7 @@ go 1.26
 
 require (
 	github.com/glebarez/sqlite v1.11.0
-	github.com/terglos/go-idento v0.3.2
+	github.com/terglos/go-idento v0.3.3
 	gorm.io/gorm v1.31.1
 )
 
