@@ -1,0 +1,30 @@
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - revive
+    - misspell
+    - bodyclose
+    - errorlint
+
+issues:
+  exclude-rules:
+    # Generated code.
+    - path: internal/sqlcgen/
+      linters:
+        - errcheck
+        - staticcheck
+        - revive
+        - unused
+    # Tests intentionally ignore some errors for brevity.
+    - path: _test\.go
+      linters:
+        - errcheck

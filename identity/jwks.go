@@ -61,22 +61,33 @@ func (k *ECDSAKeyring) JWKS() JWKSet {
 	defer k.mu.RUnlock()
 	set := JWKSet{Keys: make([]JWK, 0, len(k.keys))}
 	for kid, key := range k.keys {
-		set.Keys = append(set.Keys, ecJWK(kid, &key.PublicKey))
+		if jwk, ok := ecJWK(kid, &key.PublicKey); ok {
+			set.Keys = append(set.Keys, jwk)
+		}
 	}
 	return set
 }
 
-func ecJWK(kid string, pub *ecdsa.PublicKey) JWK {
-	size := (pub.Curve.Params().BitSize + 7) / 8 // 32 for P-256
-	x := make([]byte, size)
-	y := make([]byte, size)
-	pub.X.FillBytes(x)
-	pub.Y.FillBytes(y)
+// ecJWK builds a JWK from a P-256 public key. It derives the X/Y coordinates
+// from the uncompressed ECDH encoding (0x04 || X || Y) instead of the
+// deprecated big.Int coordinate accessors.
+func ecJWK(kid string, pub *ecdsa.PublicKey) (JWK, bool) {
+	ep, err := pub.ECDH()
+	if err != nil {
+		return JWK{}, false // not an ECDH-compatible curve
+	}
+	raw := ep.Bytes() // 0x04 || X || Y
+	if len(raw) < 3 || raw[0] != 0x04 {
+		return JWK{}, false
+	}
+	size := (len(raw) - 1) / 2
+	x := raw[1 : 1+size]
+	y := raw[1+size:]
 	return JWK{
 		Kty: "EC", Use: "sig", Kid: kid, Alg: "ES256", Crv: "P-256",
 		X: base64.RawURLEncoding.EncodeToString(x),
 		Y: base64.RawURLEncoding.EncodeToString(y),
-	}
+	}, true
 }
 
 func trimLeadingZeros(b []byte) []byte {
