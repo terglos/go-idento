@@ -25,12 +25,9 @@ atlas migrate apply --env local --url "postgres://user:pass@localhost:5432/db?ss
 
 `--env local` diffs against `identity/migrations/postgres.sql`. To drive the diff
 from the GORM models instead (so extending `AppUser` via `UserManagerOf[T]`
-auto-generates migrations), uncomment the `gorm` env in `atlas.hcl`, then:
-
-```bash
-go get ariga.io/atlas-provider-gorm/gormschema
-atlas migrate diff add_appuser_columns --env gorm
-```
+auto-generates migrations), follow the commented `gorm` env recipe in
+`atlas.hcl` — it uses the `atlas-provider-gorm` loader in a separate module so
+the provider never enters go-idento's own dependency graph.
 
 **goose / golang-migrate.** These run the SQL too; point them at this directory
 (golang-migrate expects `*.up.sql` / `*.down.sql` pairs, so split the baseline

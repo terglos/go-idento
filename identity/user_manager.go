@@ -32,6 +32,8 @@ type UserManagerOf[T any, PT Ptr[T]] struct {
 	// Tokens powers email-confirmation / password-reset helpers; nil until set
 	// via WithTokenProvider.
 	Tokens *DataTokenProvider
+	// SMS delivers phone two-factor codes; nil until set via WithSMSSender.
+	SMS SMSSender
 }
 
 // UserManager is the manager for the built-in [User] type.

@@ -24,7 +24,9 @@ Swapping persistence (or testing) is just passing a different store.
 | Tokens (JWT) | `TokenServiceOf[T,PT]` (alias `TokenService`) | `JwtBearer` (external in .NET) |
 | Persistence contract | `UserStore[T,PT]`, `RoleStore` | `IUserStore`, `IRoleStore` |
 | Password hashing | `PasswordHasher` (PBKDF2 v3) | `IPasswordHasher` |
-| JWT signing | `Signer` (`HMAC`, `RSAKeyring`) | token signing key set |
+| JWT signing | `Signer` (`HMAC` HS256, `RSAKeyring` RS256, `ECDSAKeyring` ES256) | token signing key set |
+| Public key publishing | `JWKSProvider` + `auth.JWKSHandler` | JWKS endpoint |
+| SMS two-factor | `SMSSender` + phone token helpers | `PhoneNumberTokenProvider` |
 | Reset/confirm tokens | `DataTokenProvider` | `DataProtectorTokenProvider` |
 | Policy authz | `auth.Policy` + `RequirePolicy` | `AuthorizationPolicy` |
 | Options | `identity.Options` | `IdentityOptions` |
@@ -111,8 +113,11 @@ All three implement the same interfaces; pick by need:
 
 - **gormstore** — Postgres/MySQL/SQLite from one codebase (closest to EF Core).
   `generic.go` adds `NewUserStoreOf[T]` / `MigrateOf[T]` for custom user types.
-- **pgxstore** — raw `pgx` for PostgreSQL; hand-written, sqlc-friendly SQL with an
-  embedded `schema.sql`. `attributes` is `jsonb`. Concrete to `*User`.
+- **pgxstore** — raw `pgx` for PostgreSQL; hand-written SQL with an embedded
+  `schema.sql`. `attributes` is `jsonb`. Concrete to `*User`.
+- **pgxsqlc** — PostgreSQL with a **sqlc-generated** query layer (compile-time
+  checked SQL); same schema, an adapter maps the generated types to the store
+  interfaces. Regenerate with `sqlc generate`.
 - **memstore** — in-memory, concurrency-safe; for unit tests and prototyping.
 
 See [extending-user-and-migrations.md](design/extending-user-and-migrations.md)

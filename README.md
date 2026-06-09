@@ -76,7 +76,8 @@ identity/          core: entities, managers, hasher, options, JWT
   store.go         UserStore / RoleStore interfaces
 auth/              HTTP middleware: Bearer + cookie, RequireAuth/RequireRole/RequirePolicy
 stores/gormstore/  GORM implementation (Postgres / MySQL / SQLite)
-stores/pgxstore/   raw pgx implementation (PostgreSQL, sqlc-friendly SQL)
+stores/pgxstore/   raw pgx implementation (PostgreSQL, hand-written SQL)
+stores/pgxsqlc/    sqlc-generated pgx implementation (PostgreSQL)
 stores/memstore/   in-memory implementation (tests / prototyping)
 examples/httpserver minimal register/login/me/admin server (SQLite)
 demo/postgres/     full PostgreSQL demo (docker-compose + 2FA + refresh)
@@ -133,13 +134,15 @@ EF `add-migration` loop. goose / golang-migrate can run the same SQL.
 - [x] User/role management (`UserManager`, `RoleManager`, `SignInManager`)
 - [x] PBKDF2 password hashing, **.NET v3-compatible** wire format
 - [x] JWT access + refresh tokens with security-stamp revocation
-- [x] HS256 **and** RS256 signing via pluggable `Signer` + `RSAKeyring` (kid rotation)
+- [x] HS256, **RS256 and ES256** signing via pluggable `Signer` + `RSAKeyring` / `ECDSAKeyring` (kid rotation)
+- [x] **JWKS endpoint** (`auth.JWKSHandler`) publishing RSA/EC public keys
 - [x] TOTP two-factor (RFC 6238) + one-time recovery codes
+- [x] **Phone (SMS) two-factor** via a pluggable `SMSSender`
 - [x] Email confirmation, password-reset & change-email token providers
 - [x] External/OAuth login association (`AddLogin` / `FindByLogin` / `ExternalLoginSignIn`)
 - [x] Account lockout
 - [x] Policy/claims authorization (`auth.Policy`, `RequirePolicy`) beyond roles
-- [x] Stores: GORM (Postgres/MySQL/SQLite), raw `pgx` (sqlc-friendly SQL), in-memory
+- [x] Stores: GORM (Postgres/MySQL/SQLite), raw `pgx`, **sqlc-generated** pgx, in-memory
 - [x] **Extensible user**: custom columns via the generic `UserManagerOf[T]`
   (embed `identity.User`), a JSON `Attributes` bag, an extension table, or claims
 - [x] **Migrations**: zero-CLI `migrations.ApplyPostgres`, plus Atlas config for
@@ -169,12 +172,27 @@ ring.Add("key-2", newKey, true) // new tokens use key-2; key-1 tokens still veri
 ring.Remove("key-1")            // retire once no live tokens reference it
 ```
 
+ES256 is identical — use `identity.NewECDSAKeyring(kid, ecdsaKey)`.
+
+### JWKS endpoint
+
+```go
+ring := identity.NewRSAKeyring("key-1", privKey) // or NewECDSAKeyring
+mux.Handle("/.well-known/jwks.json", auth.JWKSHandler(ring)) // publishes public keys
+```
+
+### Phone (SMS) two-factor
+
+```go
+users := identity.NewUserManager(store, opts).WithSMSSender(mySMSSender)
+users.SendPhoneToken(ctx, u)                       // delivers a 6-digit code
+res := signIn.TwoFactorPhoneSignIn(ctx, u, code)   // after PasswordSignIn returned RequiresTwoFactor
+```
+
 ## Roadmap
 
-- [ ] Phone (SMS) two-factor provider
-- [ ] JWKS endpoint exposing the RSA public keys
-- [ ] sqlc-generated query layer for the pgx store
-- [ ] ES256 signer
+- [ ] WebAuthn / passkeys
+- [ ] Backchannel logout / token introspection endpoint
 
 ## License
 

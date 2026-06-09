@@ -24,9 +24,12 @@ identity/              core (no DB dependency)
   signin_manager.go    SignInManagerOf[T,PT] + SignInResult
   token_service.go     TokenServiceOf[T,PT]: JWT access/refresh issue+validate
   signer.go            Signer abstraction: HMAC (HS256) and RSAKeyring (RS256 + rotation)
+  ecdsa_signer.go      ECDSAKeyring (ES256 + rotation)
+  jwks.go              JWK/JWKSet + JWKS() on the RSA/ECDSA keyrings
   token_provider.go    DataTokenProvider: email-confirm / password-reset tokens
   totp.go              RFC 6238 TOTP + otpauth URI
   twofactor.go         authenticator key + one-time recovery codes (on UserManagerOf)
+  phone.go             SMS two-factor (SMSSender, phone token generate/verify)
   external_login.go    OAuth/OIDC login association + ExternalLoginSignIn
   hasher.go            PBKDF2 password hasher — .NET v3 wire format (interop)
   options.go           IdentityOptions (password/lockout/user/signin policy)
@@ -36,9 +39,12 @@ auth/                  HTTP layer
   middleware.go        Bearer+cookie auth -> Principal; RequireAuth / RequireRole
   policy.go            Policy/claims authorization + RequirePolicy
   cookie.go            CookieAuth (HttpOnly cookie sessions)
+  jwks.go              JWKSHandler (serves a Signer's public keys)
 stores/
   gormstore/           GORM (Postgres/MySQL/SQLite); generic.go = NewUserStoreOf[T]
-  pgxstore/            raw pgx (PostgreSQL), sqlc-friendly SQL + embedded schema.sql
+  pgxstore/            raw pgx (PostgreSQL), hand-written SQL + embedded schema.sql
+  pgxsqlc/             sqlc-generated pgx store (sqlc.yaml, schema.sql, query.sql,
+                       internal/sqlcgen/*; adapter in store.go). Regenerate: `sqlc generate`.
   memstore/            in-memory store (tests/prototyping)
 examples/
   httpserver/          minimal SQLite server (register/login/me/admin)
@@ -122,7 +128,13 @@ Smallest blast radius first; full analysis in
    `...Of[T,PT]` types.
 5. `gofmt`, `go vet`, `go test ./...` before finishing. Update README + docs.
 
+## Regenerating sqlc
+
+The `stores/pgxsqlc` package's `internal/sqlcgen` is generated. After editing
+`schema.sql`/`query.sql`, run `sqlc generate` from `stores/pgxsqlc/`
+(`go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest` if missing). Keep the
+generated code committed.
+
 ## Roadmap (not yet done)
 
-Phone (SMS) 2FA · JWKS endpoint for RSA public keys · sqlc-generated pgx queries
-· ES256 signer · generic role types.
+WebAuthn/passkeys · backchannel logout / token introspection · generic role types.

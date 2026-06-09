@@ -31,11 +31,31 @@ env "local" {
 
 # Optional: drive the desired state from the GORM models instead of the SQL
 # file, so extending AppUser (generic UserManagerOf[T]) regenerates migrations
-# automatically. Requires `go get ariga.io/atlas-provider-gorm/gormschema` and
-# the build-tagged loader in tools/atlasloader.
+# automatically. To keep this library dependency-free, the GORM provider is not
+# vendored here. To enable it, in a SEPARATE module (so atlas-provider-gorm does
+# not enter go-idento's dependency graph) add a loader:
+#
+#   // loader/main.go
+#   package main
+#   import (
+#     "io"; "os"
+#     "ariga.io/atlas-provider-gorm/gormschema"
+#     "github.com/terglos/go-idento/identity"
+#   )
+#   func main() {
+#     stmts, _ := gormschema.New("postgres").Load(
+#       &identity.User{}, &identity.Role{}, &identity.UserRole{},
+#       &identity.UserClaim{}, &identity.RoleClaim{},
+#       &identity.UserLogin{}, &identity.UserToken{},
+#       // ...plus your own &AppUser{}
+#     )
+#     io.WriteString(os.Stdout, stmts)
+#   }
+#
+# then point an env at it:
 #
 # data "external_schema" "gorm" {
-#   program = ["go", "run", "-tags", "atlas", "./tools/atlasloader"]
+#   program = ["go", "run", "./loader"]
 # }
 # env "gorm" {
 #   src = data.external_schema.gorm.url

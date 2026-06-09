@@ -95,6 +95,24 @@ func (s *SignInManagerOf[T, PT]) TwoFactorAuthenticatorSignIn(ctx context.Contex
 	return SignInResult{}
 }
 
+// TwoFactorPhoneSignIn completes a sign-in that required 2FA, using an SMS code
+// previously delivered via SendPhoneToken.
+func (s *SignInManagerOf[T, PT]) TwoFactorPhoneSignIn(ctx context.Context, u PT, code string) SignInResult {
+	if s.Users.IsLockedOut(u) {
+		return SignInResult{IsLockedOut: true}
+	}
+	ok, err := s.Users.VerifyPhoneToken(ctx, u, code)
+	if err == nil && ok {
+		_ = s.Users.ResetAccessFailedCount(ctx, u)
+		return SignInResult{Succeeded: true}
+	}
+	_ = s.Users.AccessFailed(ctx, u)
+	if s.Users.IsLockedOut(u) {
+		return SignInResult{IsLockedOut: true}
+	}
+	return SignInResult{}
+}
+
 // TwoFactorRecoveryCodeSignIn completes 2FA using a one-time recovery code.
 func (s *SignInManagerOf[T, PT]) TwoFactorRecoveryCodeSignIn(ctx context.Context, u PT, code string) SignInResult {
 	if s.Users.IsLockedOut(u) {
