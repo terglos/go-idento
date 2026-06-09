@@ -28,6 +28,7 @@ var (
 	ErrPasswordRequiresUnique   = newErr("PasswordRequiresUniqueChars", "Passwords must use a minimum number of distinct characters.")
 	ErrInvalidUserName          = newErr("InvalidUserName", "User name contains characters that are not allowed.")
 	ErrPasswordAlreadySet       = newErr("PasswordAlreadySet", "User already has a password; use ChangePassword instead.")
+	ErrLoginAlreadyUsed         = newErr("LoginAlreadyAssociated", "External login is already associated with a user.")
 	ErrPasswordMismatch         = newErr("PasswordMismatch", "Incorrect password.")
 	ErrUserLockedOut            = newErr("UserLockedOut", "User is locked out.")
 	ErrInvalidToken             = newErr("InvalidToken", "Invalid token.")

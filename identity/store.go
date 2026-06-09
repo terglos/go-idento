@@ -28,12 +28,18 @@ type UserCrudStore[T any, PT Ptr[T]] interface {
 
 	FindByID(ctx context.Context, id string) (PT, error)
 	FindByName(ctx context.Context, normalizedUserName string) (PT, error)
+	// FindByEmail looks up by normalized email. An empty normalizedEmail returns
+	// ErrNotFound (users without an email store '' — it must never match).
 	FindByEmail(ctx context.Context, normalizedEmail string) (PT, error)
 }
 
 // UserRoleStore handles a user's role memberships (role names are normalized).
 type UserRoleStore[T any, PT Ptr[T]] interface {
+	// AddToRole adds the membership. It returns ErrRoleNotFound when the role
+	// does not exist and is idempotent when the user is already a member.
 	AddToRole(ctx context.Context, u PT, normalizedRoleName string) error
+	// RemoveFromRole is a no-op (nil) when the role does not exist or the user
+	// is not a member.
 	RemoveFromRole(ctx context.Context, u PT, normalizedRoleName string) error
 	GetRoles(ctx context.Context, u PT) ([]string, error)
 	IsInRole(ctx context.Context, u PT, normalizedRoleName string) (bool, error)
@@ -60,6 +66,9 @@ type UserTokenStore[T any, PT Ptr[T]] interface {
 
 // UserLoginStore handles external (OAuth/OIDC) login associations.
 type UserLoginStore[T any, PT Ptr[T]] interface {
+	// AddLogin associates the external login. (provider, key) is unique across
+	// users: re-adding an already-associated login errors (ErrLoginAlreadyUsed
+	// in the in-memory store; a driver unique-violation in the SQL stores).
 	AddLogin(ctx context.Context, u PT, login UserLoginInfo) error
 	RemoveLogin(ctx context.Context, u PT, loginProvider, providerKey string) error
 	GetLogins(ctx context.Context, u PT) ([]UserLoginInfo, error)

@@ -96,6 +96,7 @@ type queries struct {
 	findUserByID, findUserByName, findUserByEmail  string
 	countUsers, listUsers                          string
 	addToRole, removeFromRole, getRoles, isInRole  string
+	roleExistsByName                               string
 	usersInRole, usersForClaim                     string
 	getUserClaims, addUserClaim, removeUserClaim   string
 	getToken, setToken, removeToken                string
@@ -122,38 +123,39 @@ func buildQueries(n identity.Naming) queries {
 			phone_number=$10, phone_number_confirmed=$11, two_factor_enabled=$12,
 			lockout_end=$13, lockout_enabled=$14, access_failed_count=$15, attributes=$16, updated_at=now()
 			WHERE id=$1 AND concurrency_stamp=$17`, U),
-		userExists:      fmt.Sprintf(`SELECT EXISTS(SELECT 1 FROM %s WHERE id=$1)`, U),
-		deleteUser:      fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, U),
-		findUserByID:    fmt.Sprintf(`SELECT %s FROM %s WHERE id=$1`, userCols, U),
-		findUserByName:  fmt.Sprintf(`SELECT %s FROM %s WHERE normalized_user_name=$1`, userCols, U),
-		findUserByEmail: fmt.Sprintf(`SELECT %s FROM %s WHERE normalized_email=$1`, userCols, U),
-		countUsers:      fmt.Sprintf(`SELECT count(*) FROM %s WHERE %s`, U, where),
-		listUsers:       fmt.Sprintf(`SELECT %s FROM %s WHERE %s ORDER BY id LIMIT $2 OFFSET $3`, userCols, U, where),
-		addToRole:       fmt.Sprintf(`INSERT INTO %s (user_id, role_id) SELECT $1, id FROM %s WHERE normalized_name=$2 ON CONFLICT (user_id, role_id) DO NOTHING`, UR, R),
-		removeFromRole:  fmt.Sprintf(`DELETE FROM %s WHERE user_id=$1 AND role_id=(SELECT id FROM %s WHERE normalized_name=$2)`, UR, R),
-		getRoles:        fmt.Sprintf(`SELECT r.name FROM %s r JOIN %s ur ON ur.role_id=r.id WHERE ur.user_id=$1`, R, UR),
-		isInRole:        fmt.Sprintf(`SELECT EXISTS(SELECT 1 FROM %s ur JOIN %s r ON r.id=ur.role_id WHERE ur.user_id=$1 AND r.normalized_name=$2)`, UR, R),
-		usersInRole:     fmt.Sprintf(`SELECT %s FROM %s WHERE id IN (SELECT user_id FROM %s WHERE role_id=(SELECT id FROM %s WHERE normalized_name=$1)) ORDER BY id`, userCols, U, UR, R),
-		usersForClaim:   fmt.Sprintf(`SELECT %s FROM %s WHERE id IN (SELECT user_id FROM %s WHERE claim_type=$1 AND claim_value=$2) ORDER BY id`, userCols, U, UC),
-		getUserClaims:   fmt.Sprintf(`SELECT claim_type, claim_value FROM %s WHERE user_id=$1`, UC),
-		addUserClaim:    fmt.Sprintf(`INSERT INTO %s (user_id, claim_type, claim_value) VALUES ($1,$2,$3)`, UC),
-		removeUserClaim: fmt.Sprintf(`DELETE FROM %s WHERE user_id=$1 AND claim_type=$2 AND claim_value=$3`, UC),
-		getToken:        fmt.Sprintf(`SELECT value FROM %s WHERE user_id=$1 AND login_provider=$2 AND name=$3`, UT),
-		setToken:        fmt.Sprintf(`INSERT INTO %s (user_id, login_provider, name, value) VALUES ($1,$2,$3,$4) ON CONFLICT (user_id, login_provider, name) DO UPDATE SET value=EXCLUDED.value`, UT),
-		removeToken:     fmt.Sprintf(`DELETE FROM %s WHERE user_id=$1 AND login_provider=$2 AND name=$3`, UT),
-		addLogin:        fmt.Sprintf(`INSERT INTO %s (login_provider, provider_key, provider_display_name, user_id) VALUES ($1,$2,$3,$4)`, UL),
-		removeLogin:     fmt.Sprintf(`DELETE FROM %s WHERE user_id=$1 AND login_provider=$2 AND provider_key=$3`, UL),
-		getLogins:       fmt.Sprintf(`SELECT login_provider, provider_key, provider_display_name FROM %s WHERE user_id=$1`, UL),
-		findByLogin:     fmt.Sprintf(`SELECT user_id FROM %s WHERE login_provider=$1 AND provider_key=$2`, UL),
-		createRole:      fmt.Sprintf(`INSERT INTO %s (id, name, normalized_name, concurrency_stamp) VALUES ($1,$2,$3,$4)`, R),
-		updateRole:      fmt.Sprintf(`UPDATE %s SET name=$2, normalized_name=$3, concurrency_stamp=$4 WHERE id=$1 AND concurrency_stamp=$5`, R),
-		deleteRole:      fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, R),
-		roleExists:      fmt.Sprintf(`SELECT EXISTS(SELECT 1 FROM %s WHERE id=$1)`, R),
-		findRoleByID:    fmt.Sprintf(`SELECT id, name, normalized_name, concurrency_stamp FROM %s WHERE id=$1`, R),
-		findRoleByName:  fmt.Sprintf(`SELECT id, name, normalized_name, concurrency_stamp FROM %s WHERE normalized_name=$1`, R),
-		getRoleClaims:   fmt.Sprintf(`SELECT claim_type, claim_value FROM %s WHERE role_id=$1`, RC),
-		addRoleClaim:    fmt.Sprintf(`INSERT INTO %s (role_id, claim_type, claim_value) VALUES ($1,$2,$3)`, RC),
-		removeRoleClaim: fmt.Sprintf(`DELETE FROM %s WHERE role_id=$1 AND claim_type=$2 AND claim_value=$3`, RC),
+		userExists:       fmt.Sprintf(`SELECT EXISTS(SELECT 1 FROM %s WHERE id=$1)`, U),
+		deleteUser:       fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, U),
+		findUserByID:     fmt.Sprintf(`SELECT %s FROM %s WHERE id=$1`, userCols, U),
+		findUserByName:   fmt.Sprintf(`SELECT %s FROM %s WHERE normalized_user_name=$1`, userCols, U),
+		findUserByEmail:  fmt.Sprintf(`SELECT %s FROM %s WHERE normalized_email=$1`, userCols, U),
+		countUsers:       fmt.Sprintf(`SELECT count(*) FROM %s WHERE %s`, U, where),
+		listUsers:        fmt.Sprintf(`SELECT %s FROM %s WHERE %s ORDER BY id LIMIT $2 OFFSET $3`, userCols, U, where),
+		addToRole:        fmt.Sprintf(`INSERT INTO %s (user_id, role_id) SELECT $1, id FROM %s WHERE normalized_name=$2 ON CONFLICT (user_id, role_id) DO NOTHING`, UR, R),
+		removeFromRole:   fmt.Sprintf(`DELETE FROM %s WHERE user_id=$1 AND role_id=(SELECT id FROM %s WHERE normalized_name=$2)`, UR, R),
+		getRoles:         fmt.Sprintf(`SELECT r.name FROM %s r JOIN %s ur ON ur.role_id=r.id WHERE ur.user_id=$1`, R, UR),
+		isInRole:         fmt.Sprintf(`SELECT EXISTS(SELECT 1 FROM %s ur JOIN %s r ON r.id=ur.role_id WHERE ur.user_id=$1 AND r.normalized_name=$2)`, UR, R),
+		roleExistsByName: fmt.Sprintf(`SELECT EXISTS(SELECT 1 FROM %s WHERE normalized_name=$1)`, R),
+		usersInRole:      fmt.Sprintf(`SELECT %s FROM %s WHERE id IN (SELECT user_id FROM %s WHERE role_id=(SELECT id FROM %s WHERE normalized_name=$1)) ORDER BY id`, userCols, U, UR, R),
+		usersForClaim:    fmt.Sprintf(`SELECT %s FROM %s WHERE id IN (SELECT user_id FROM %s WHERE claim_type=$1 AND claim_value=$2) ORDER BY id`, userCols, U, UC),
+		getUserClaims:    fmt.Sprintf(`SELECT claim_type, claim_value FROM %s WHERE user_id=$1`, UC),
+		addUserClaim:     fmt.Sprintf(`INSERT INTO %s (user_id, claim_type, claim_value) VALUES ($1,$2,$3)`, UC),
+		removeUserClaim:  fmt.Sprintf(`DELETE FROM %s WHERE user_id=$1 AND claim_type=$2 AND claim_value=$3`, UC),
+		getToken:         fmt.Sprintf(`SELECT value FROM %s WHERE user_id=$1 AND login_provider=$2 AND name=$3`, UT),
+		setToken:         fmt.Sprintf(`INSERT INTO %s (user_id, login_provider, name, value) VALUES ($1,$2,$3,$4) ON CONFLICT (user_id, login_provider, name) DO UPDATE SET value=EXCLUDED.value`, UT),
+		removeToken:      fmt.Sprintf(`DELETE FROM %s WHERE user_id=$1 AND login_provider=$2 AND name=$3`, UT),
+		addLogin:         fmt.Sprintf(`INSERT INTO %s (login_provider, provider_key, provider_display_name, user_id) VALUES ($1,$2,$3,$4)`, UL),
+		removeLogin:      fmt.Sprintf(`DELETE FROM %s WHERE user_id=$1 AND login_provider=$2 AND provider_key=$3`, UL),
+		getLogins:        fmt.Sprintf(`SELECT login_provider, provider_key, provider_display_name FROM %s WHERE user_id=$1`, UL),
+		findByLogin:      fmt.Sprintf(`SELECT user_id FROM %s WHERE login_provider=$1 AND provider_key=$2`, UL),
+		createRole:       fmt.Sprintf(`INSERT INTO %s (id, name, normalized_name, concurrency_stamp) VALUES ($1,$2,$3,$4)`, R),
+		updateRole:       fmt.Sprintf(`UPDATE %s SET name=$2, normalized_name=$3, concurrency_stamp=$4 WHERE id=$1 AND concurrency_stamp=$5`, R),
+		deleteRole:       fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, R),
+		roleExists:       fmt.Sprintf(`SELECT EXISTS(SELECT 1 FROM %s WHERE id=$1)`, R),
+		findRoleByID:     fmt.Sprintf(`SELECT id, name, normalized_name, concurrency_stamp FROM %s WHERE id=$1`, R),
+		findRoleByName:   fmt.Sprintf(`SELECT id, name, normalized_name, concurrency_stamp FROM %s WHERE normalized_name=$1`, R),
+		getRoleClaims:    fmt.Sprintf(`SELECT claim_type, claim_value FROM %s WHERE role_id=$1`, RC),
+		addRoleClaim:     fmt.Sprintf(`INSERT INTO %s (role_id, claim_type, claim_value) VALUES ($1,$2,$3)`, RC),
+		removeRoleClaim:  fmt.Sprintf(`DELETE FROM %s WHERE role_id=$1 AND claim_type=$2 AND claim_value=$3`, RC),
 	}
 }
 
@@ -237,6 +239,9 @@ func (s *UserStore) FindByName(ctx context.Context, n string) (*identity.User, e
 }
 
 func (s *UserStore) FindByEmail(ctx context.Context, e string) (*identity.User, error) {
+	if e == "" {
+		return nil, identity.ErrNotFound // users without an email store ''
+	}
 	return scanUser(s.db.QueryRow(ctx, s.q.findUserByEmail, e))
 }
 
@@ -264,8 +269,20 @@ func (s *UserStore) ListUsers(ctx context.Context, f identity.ListFilter) ([]*id
 }
 
 func (s *UserStore) AddToRole(ctx context.Context, u *identity.User, normalizedRoleName string) error {
-	_, err := s.db.Exec(ctx, s.q.addToRole, u.ID, normalizedRoleName)
-	return err
+	tag, err := s.db.Exec(ctx, s.q.addToRole, u.ID, normalizedRoleName)
+	if err != nil {
+		return err
+	}
+	// 0 rows is ambiguous: ON CONFLICT swallowed an existing membership (fine,
+	// idempotent) OR the INSERT..SELECT found no role. Disambiguate so a missing
+	// role surfaces as ErrRoleNotFound instead of silently succeeding.
+	if tag.RowsAffected() == 0 {
+		var exists bool
+		if e := s.db.QueryRow(ctx, s.q.roleExistsByName, normalizedRoleName).Scan(&exists); e == nil && !exists {
+			return identity.ErrRoleNotFound
+		}
+	}
+	return nil
 }
 
 func (s *UserStore) RemoveFromRole(ctx context.Context, u *identity.User, normalizedRoleName string) error {

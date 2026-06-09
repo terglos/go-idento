@@ -4,6 +4,31 @@ Notable changes per release. Versions follow [SemVer](https://semver.org). This
 is a multi-module repo; all modules (`.`, `stores/gormstore`, `stores/pgxstore`,
 `stores/pgxsqlc`) share the same version tag.
 
+## v0.3.3
+
+Store behavioral-parity pass (third double-check): the same manager call now
+behaves identically on every store, and the contract is documented on the
+store interfaces and pinned by tests.
+
+### Fixed
+- **`AddToRole` with a missing role** now returns `ErrRoleNotFound` on every
+  store. Before: pgxstore **silently succeeded** (the `INSERT..SELECT` matched
+  no role and `ON CONFLICT` hid it), and gorm/sqlc returned the wrong sentinel
+  (`ErrNotFound`).
+- **`RemoveFromRole` with a missing role** is now a no-op on every store
+  (gorm/sqlc previously errored; mem/pgx already no-op'ed).
+- **`FindByEmail("")`** now returns `ErrNotFound` on the SQL stores instead of
+  potentially matching an arbitrary user created without an email (memstore
+  already guarded).
+- **`memstore.AddLogin`** no longer silently re-binds an existing
+  (provider, key) to another user; it returns the new `ErrLoginAlreadyUsed`
+  (SQL stores already rejected via unique constraint).
+
+### Docs
+- The cross-store contract is documented on `UserCrudStore`/`UserRoleStore`/
+  `UserLoginStore`; README quick start is now self-contained (defines
+  `ctx`/`secret`).
+
 ## v0.3.2
 
 Hardening pass (second double-check; core crypto/token review).

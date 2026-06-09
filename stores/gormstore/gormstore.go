@@ -187,6 +187,9 @@ func (s *UserStore) FindByName(ctx context.Context, normalizedUserName string) (
 }
 
 func (s *UserStore) FindByEmail(ctx context.Context, normalizedEmail string) (*identity.User, error) {
+	if normalizedEmail == "" {
+		return nil, identity.ErrNotFound // users without an email store ''
+	}
 	return s.findUser(ctx, "normalized_email = ?", normalizedEmail)
 }
 
@@ -221,6 +224,9 @@ func (s *UserStore) roleIDByName(ctx context.Context, normalizedRoleName string)
 
 func (s *UserStore) AddToRole(ctx context.Context, u *identity.User, normalizedRoleName string) error {
 	rid, err := s.roleIDByName(ctx, normalizedRoleName)
+	if errors.Is(err, identity.ErrNotFound) {
+		return identity.ErrRoleNotFound // store contract: typed error for a missing role
+	}
 	if err != nil {
 		return err
 	}
@@ -231,6 +237,9 @@ func (s *UserStore) AddToRole(ctx context.Context, u *identity.User, normalizedR
 
 func (s *UserStore) RemoveFromRole(ctx context.Context, u *identity.User, normalizedRoleName string) error {
 	rid, err := s.roleIDByName(ctx, normalizedRoleName)
+	if errors.Is(err, identity.ErrNotFound) {
+		return nil // store contract: removing from a nonexistent role is a no-op
+	}
 	if err != nil {
 		return err
 	}

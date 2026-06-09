@@ -10,7 +10,7 @@ management, password hashing, claims, lockout, two-factor and JWT, built on
 pluggable stores so the persistence layer can be swapped without touching
 business logic.
 
-> Status: beta (v0.3.2). User/role/sign-in managers, PBKDF2 hashing, JWT
+> Status: beta (v0.3.3). User/role/sign-in managers, PBKDF2 hashing, JWT
 > (HS256/RS256/ES256) + JWKS, TOTP/SMS two-factor with recovery codes, external
 > logins, email-confirmation/password-reset tokens, and policy authorization are
 > implemented and tested. Four stores ship: in-memory, GORM, raw `pgx`, and a
@@ -55,6 +55,9 @@ version byte lets parameters evolve while old hashes keep verifying.
 ## Quick start
 
 ```go
+ctx := context.Background()
+secret := []byte("change-me-32-byte-jwt-secret-min!")
+
 db, _ := gorm.Open(sqlite.Open("app.db"), &gorm.Config{})
 gormstore.Migrate(db)
 

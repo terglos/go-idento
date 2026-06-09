@@ -316,6 +316,11 @@ func (s *userStore) AddLogin(_ context.Context, u *identity.User, login identity
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	k := loginKey(login.LoginProvider, login.ProviderKey)
+	// (provider, key) is unique across users — never silently re-bind a login
+	// to a different account (mirrors the SQL stores' unique constraint).
+	if _, exists := s.loginUser[k]; exists {
+		return identity.ErrLoginAlreadyUsed
+	}
 	s.logins[k] = login
 	s.loginUser[k] = u.ID
 	return nil

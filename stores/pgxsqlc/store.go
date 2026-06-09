@@ -136,6 +136,9 @@ func (s *UserStore) FindByName(ctx context.Context, n string) (*identity.User, e
 }
 
 func (s *UserStore) FindByEmail(ctx context.Context, e string) (*identity.User, error) {
+	if e == "" {
+		return nil, identity.ErrNotFound // users without an email store ''
+	}
 	r, err := s.q.GetUserByEmail(ctx, e)
 	if err != nil {
 		return nil, mapNotFound(err)
@@ -163,16 +166,22 @@ func (s *UserStore) ListUsers(ctx context.Context, f identity.ListFilter) ([]*id
 
 func (s *UserStore) AddToRole(ctx context.Context, u *identity.User, normalizedRoleName string) error {
 	rid, err := s.q.GetRoleIDByName(ctx, normalizedRoleName)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return identity.ErrRoleNotFound // store contract: typed error for a missing role
+	}
 	if err != nil {
-		return mapNotFound(err)
+		return err
 	}
 	return s.q.AddUserToRole(ctx, gen.AddUserToRoleParams{UserID: u.ID, RoleID: rid})
 }
 
 func (s *UserStore) RemoveFromRole(ctx context.Context, u *identity.User, normalizedRoleName string) error {
 	rid, err := s.q.GetRoleIDByName(ctx, normalizedRoleName)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil // store contract: removing from a nonexistent role is a no-op
+	}
 	if err != nil {
-		return mapNotFound(err)
+		return err
 	}
 	return s.q.RemoveUserFromRole(ctx, gen.RemoveUserFromRoleParams{UserID: u.ID, RoleID: rid})
 }

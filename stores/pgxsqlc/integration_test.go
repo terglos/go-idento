@@ -108,6 +108,17 @@ func TestSqlcIntegration(t *testing.T) {
 		t.Fatalf("list users: err=%v total=%d page=%d", err, total, len(page))
 	}
 
+	// Store behavioral contract through the sqlc store.
+	if err := um.AddToRole(ctx, signed, "ghost"); err != identity.ErrRoleNotFound {
+		t.Fatalf("AddToRole(missing role) must be ErrRoleNotFound, got %v", err)
+	}
+	if err := um.RemoveFromRole(ctx, signed, "ghost"); err != nil {
+		t.Fatalf("RemoveFromRole(missing role) must be a no-op, got %v", err)
+	}
+	if got, err := um.FindByEmail(ctx, ""); got != nil || err != identity.ErrNotFound {
+		t.Fatalf("FindByEmail(\"\") must be ErrNotFound, got user=%v err=%v", got, err)
+	}
+
 	// Reverse queries: users by role and by claim.
 	if err := um.AddClaims(ctx, signed, identity.Claim{Type: "tenant", Value: "acme"}); err != nil {
 		t.Fatalf("add claim: %v", err)
