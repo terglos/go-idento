@@ -65,6 +65,7 @@ func (q *Queries) AddUserLogin(ctx context.Context, arg AddUserLoginParams) erro
 
 const addUserToRole = `-- name: AddUserToRole :exec
 INSERT INTO identity_user_roles (user_id, role_id) VALUES ($1, $2)
+ON CONFLICT (user_id, role_id) DO NOTHING
 `
 
 type AddUserToRoleParams struct {

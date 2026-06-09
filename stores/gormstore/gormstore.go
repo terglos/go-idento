@@ -10,6 +10,7 @@ import (
 
 	"github.com/terglos/go-idento/identity"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // UserStore implements identity.UserStore over GORM.
@@ -132,7 +133,9 @@ func (s *UserStore) AddToRole(ctx context.Context, u *identity.User, normalizedR
 	if err != nil {
 		return err
 	}
-	return s.db.WithContext(ctx).Create(&identity.UserRole{UserID: u.ID, RoleID: rid}).Error
+	// Idempotent: adding an existing membership is a no-op.
+	return s.db.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).
+		Create(&identity.UserRole{UserID: u.ID, RoleID: rid}).Error
 }
 
 func (s *UserStore) RemoveFromRole(ctx context.Context, u *identity.User, normalizedRoleName string) error {

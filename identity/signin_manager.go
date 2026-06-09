@@ -61,14 +61,18 @@ func (s *SignInManagerOf[T, PT]) passwordSignInUser(ctx context.Context, u PT, p
 		return SignInResult{IsNotAllowed: true}, u
 	}
 	if s.Users.CheckPassword(ctx, u, password) {
-		_ = s.Users.ResetAccessFailedCount(ctx, u)
+		if err := s.Users.ResetAccessFailedCount(ctx, u); err != nil {
+			s.Users.logger().Warn("identity: failed to reset access-failed count", "user", u.Base().ID, "err", err)
+		}
 		if u.Base().TwoFactorEnabled {
 			return SignInResult{RequiresTwoFactor: true}, u
 		}
 		return SignInResult{Succeeded: true}, u
 	}
 	if lockoutOnFailure {
-		_ = s.Users.AccessFailed(ctx, u)
+		if err := s.Users.AccessFailed(ctx, u); err != nil {
+			s.Users.logger().Warn("identity: failed to record access failure", "user", u.Base().ID, "err", err)
+		}
 		if s.Users.IsLockedOut(u) {
 			return SignInResult{IsLockedOut: true}, u
 		}
@@ -84,7 +88,9 @@ func (s *SignInManagerOf[T, PT]) TwoFactorAuthenticatorSignIn(ctx context.Contex
 	}
 	ok, err := s.Users.VerifyTwoFactorTOTP(ctx, u, code)
 	if err == nil && ok {
-		_ = s.Users.ResetAccessFailedCount(ctx, u)
+		if err := s.Users.ResetAccessFailedCount(ctx, u); err != nil {
+			s.Users.logger().Warn("identity: failed to reset access-failed count", "user", u.Base().ID, "err", err)
+		}
 		return SignInResult{Succeeded: true}
 	}
 	_ = s.Users.AccessFailed(ctx, u)
@@ -102,7 +108,9 @@ func (s *SignInManagerOf[T, PT]) TwoFactorPhoneSignIn(ctx context.Context, u PT,
 	}
 	ok, err := s.Users.VerifyPhoneToken(ctx, u, code)
 	if err == nil && ok {
-		_ = s.Users.ResetAccessFailedCount(ctx, u)
+		if err := s.Users.ResetAccessFailedCount(ctx, u); err != nil {
+			s.Users.logger().Warn("identity: failed to reset access-failed count", "user", u.Base().ID, "err", err)
+		}
 		return SignInResult{Succeeded: true}
 	}
 	_ = s.Users.AccessFailed(ctx, u)
@@ -119,7 +127,9 @@ func (s *SignInManagerOf[T, PT]) TwoFactorRecoveryCodeSignIn(ctx context.Context
 	}
 	ok, err := s.Users.RedeemRecoveryCode(ctx, u, code)
 	if err == nil && ok {
-		_ = s.Users.ResetAccessFailedCount(ctx, u)
+		if err := s.Users.ResetAccessFailedCount(ctx, u); err != nil {
+			s.Users.logger().Warn("identity: failed to reset access-failed count", "user", u.Base().ID, "err", err)
+		}
 		return SignInResult{Succeeded: true}
 	}
 	return SignInResult{}

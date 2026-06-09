@@ -34,6 +34,8 @@ type UserManagerOf[T any, PT Ptr[T]] struct {
 	Tokens *DataTokenProvider
 	// SMS delivers phone two-factor codes; nil until set via WithSMSSender.
 	SMS SMSSender
+	// Logger surfaces non-fatal security-relevant failures; defaults to no-op.
+	Logger Logger
 }
 
 // UserManager is the manager for the built-in [User] type.
@@ -51,6 +53,7 @@ func NewUserManagerOf[T any, PT Ptr[T]](store UserStore[T, PT], opts Options) *U
 		Hasher:     NewPasswordHasher(),
 		Options:    opts,
 		Normalizer: upperNormalizer{},
+		Logger:     nopLogger{},
 	}
 }
 
@@ -149,9 +152,19 @@ func (m *UserManagerOf[T, PT]) CheckPassword(ctx context.Context, u PT, password
 	}
 	if needsRehash {
 		b.PasswordHash = m.Hasher.Hash(b, password)
-		_ = m.Store.Update(ctx, u)
+		if err := m.Store.Update(ctx, u); err != nil {
+			m.logger().Warn("identity: failed to persist password rehash", "user", b.ID, "err", err)
+		}
 	}
 	return true
+}
+
+// logger returns the configured logger or a no-op.
+func (m *UserManagerOf[T, PT]) logger() Logger {
+	if m.Logger == nil {
+		return nopLogger{}
+	}
+	return m.Logger
 }
 
 // ChangePassword verifies the current password then sets a new one.

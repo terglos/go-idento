@@ -17,7 +17,10 @@ import (
 )
 
 // UserStore implements identity.DefaultUserStore via sqlc-generated queries.
-type UserStore struct{ q *gen.Queries }
+type UserStore struct {
+	db *pgxpool.Pool
+	q  *gen.Queries
+}
 
 // RoleStore implements identity.RoleStore via sqlc-generated queries.
 type RoleStore struct{ q *gen.Queries }
@@ -28,7 +31,7 @@ var (
 	_ identity.UserLister[identity.User, *identity.User] = (*UserStore)(nil)
 )
 
-func NewUserStore(db *pgxpool.Pool) *UserStore { return &UserStore{q: gen.New(db)} }
+func NewUserStore(db *pgxpool.Pool) *UserStore { return &UserStore{db: db, q: gen.New(db)} }
 func NewRoleStore(db *pgxpool.Pool) *RoleStore { return &RoleStore{q: gen.New(db)} }
 
 func mapNotFound(err error) error {
@@ -195,21 +198,38 @@ func (s *UserStore) GetClaims(ctx context.Context, u *identity.User) ([]identity
 }
 
 func (s *UserStore) AddClaims(ctx context.Context, u *identity.User, claims []identity.Claim) error {
-	for _, c := range claims {
-		if err := s.q.AddUserClaim(ctx, gen.AddUserClaimParams{UserID: u.ID, ClaimType: c.Type, ClaimValue: c.Value}); err != nil {
-			return err
+	return s.inTx(ctx, func(q *gen.Queries) error {
+		for _, c := range claims {
+			if err := q.AddUserClaim(ctx, gen.AddUserClaimParams{UserID: u.ID, ClaimType: c.Type, ClaimValue: c.Value}); err != nil {
+				return err
+			}
 		}
-	}
-	return nil
+		return nil
+	})
 }
 
 func (s *UserStore) RemoveClaims(ctx context.Context, u *identity.User, claims []identity.Claim) error {
-	for _, c := range claims {
-		if err := s.q.DeleteUserClaim(ctx, gen.DeleteUserClaimParams{UserID: u.ID, ClaimType: c.Type, ClaimValue: c.Value}); err != nil {
-			return err
+	return s.inTx(ctx, func(q *gen.Queries) error {
+		for _, c := range claims {
+			if err := q.DeleteUserClaim(ctx, gen.DeleteUserClaimParams{UserID: u.ID, ClaimType: c.Type, ClaimValue: c.Value}); err != nil {
+				return err
+			}
 		}
+		return nil
+	})
+}
+
+// inTx runs fn inside a transaction so multi-row claim mutations are atomic.
+func (s *UserStore) inTx(ctx context.Context, fn func(*gen.Queries) error) error {
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return err
 	}
-	return nil
+	defer tx.Rollback(ctx) //nolint:errcheck // no-op after a successful commit
+	if err := fn(s.q.WithTx(tx)); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 func (s *UserStore) GetToken(ctx context.Context, u *identity.User, loginProvider, name string) (string, error) {

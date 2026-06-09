@@ -110,7 +110,9 @@ func (t *TokenServiceOf[T, PT]) IssuePair(ctx context.Context, u PT) (*TokenPair
 		claims[ClaimRole] = roles
 	}
 	// Custom user claims are merged in.
-	if userClaims, err := t.Users.GetClaims(ctx, u); err == nil {
+	if userClaims, err := t.Users.GetClaims(ctx, u); err != nil {
+		t.Users.logger().Warn("identity: failed to load user claims for token", "user", b.ID, "err", err)
+	} else {
 		for _, c := range userClaims {
 			if _, taken := claims[c.Type]; !taken {
 				claims[c.Type] = c.Value

@@ -47,7 +47,8 @@ SELECT * FROM identity_users WHERE normalized_email=$1;
 SELECT id FROM identity_roles WHERE normalized_name=$1;
 
 -- name: AddUserToRole :exec
-INSERT INTO identity_user_roles (user_id, role_id) VALUES ($1, $2);
+INSERT INTO identity_user_roles (user_id, role_id) VALUES ($1, $2)
+ON CONFLICT (user_id, role_id) DO NOTHING;
 
 -- name: RemoveUserFromRole :exec
 DELETE FROM identity_user_roles WHERE user_id=$1 AND role_id=$2;

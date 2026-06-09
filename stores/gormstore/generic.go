@@ -6,6 +6,7 @@ import (
 
 	"github.com/terglos/go-idento/identity"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // GenericUserStore is a GORM user store for a custom user type T that embeds
@@ -121,7 +122,8 @@ func (s *GenericUserStore[T, PT]) AddToRole(ctx context.Context, u PT, normalize
 	if err != nil {
 		return err
 	}
-	return s.db.WithContext(ctx).Create(&identity.UserRole{UserID: u.Base().ID, RoleID: rid}).Error
+	return s.db.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).
+		Create(&identity.UserRole{UserID: u.Base().ID, RoleID: rid}).Error
 }
 
 func (s *GenericUserStore[T, PT]) RemoveFromRole(ctx context.Context, u PT, normalizedRoleName string) error {

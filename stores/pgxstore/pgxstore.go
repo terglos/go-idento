@@ -172,7 +172,8 @@ func (s *UserStore) ListUsers(ctx context.Context, f identity.ListFilter) ([]*id
 
 func (s *UserStore) AddToRole(ctx context.Context, u *identity.User, normalizedRoleName string) error {
 	_, err := s.db.Exec(ctx, `INSERT INTO identity_user_roles (user_id, role_id)
-		SELECT $1, id FROM identity_roles WHERE normalized_name=$2`, u.ID, normalizedRoleName)
+		SELECT $1, id FROM identity_roles WHERE normalized_name=$2
+		ON CONFLICT (user_id, role_id) DO NOTHING`, u.ID, normalizedRoleName)
 	return err
 }
 
