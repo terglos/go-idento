@@ -1,6 +1,11 @@
 -- Canonical go-identity schema for PostgreSQL. Kept in sync with the entities
 -- in package identity. Apply via migrations.ApplyPostgres (no CLI required), or
--- feed to Atlas/goose/golang-migrate as the baseline.
+-- feed to Atlas/goose/golang-migrate as the desired state.
+--
+-- Satellite tables carry ON DELETE CASCADE foreign keys to users/roles, matching
+-- the pgx stores' Migrate. (Note: the sqlc store's schema.sql additionally marks
+-- text columns NOT NULL DEFAULT '' — an intentional sqlc-codegen requirement,
+-- not a semantic difference; the framework never writes NULLs either way.)
 CREATE TABLE IF NOT EXISTS identity_users (
     id                     VARCHAR(36) PRIMARY KEY,
     user_name              VARCHAR(256),
@@ -33,14 +38,14 @@ CREATE TABLE IF NOT EXISTS identity_roles (
 CREATE UNIQUE INDEX IF NOT EXISTS ux_identity_roles_name ON identity_roles (normalized_name);
 
 CREATE TABLE IF NOT EXISTS identity_user_roles (
-    user_id VARCHAR(36) NOT NULL,
-    role_id VARCHAR(36) NOT NULL,
+    user_id VARCHAR(36) NOT NULL REFERENCES identity_users(id) ON DELETE CASCADE,
+    role_id VARCHAR(36) NOT NULL REFERENCES identity_roles(id) ON DELETE CASCADE,
     PRIMARY KEY (user_id, role_id)
 );
 
 CREATE TABLE IF NOT EXISTS identity_user_claims (
     id          BIGSERIAL PRIMARY KEY,
-    user_id     VARCHAR(36) NOT NULL,
+    user_id     VARCHAR(36) NOT NULL REFERENCES identity_users(id) ON DELETE CASCADE,
     claim_type  VARCHAR(256),
     claim_value VARCHAR(256)
 );
@@ -48,7 +53,7 @@ CREATE INDEX IF NOT EXISTS ix_identity_user_claims_user ON identity_user_claims 
 
 CREATE TABLE IF NOT EXISTS identity_role_claims (
     id          BIGSERIAL PRIMARY KEY,
-    role_id     VARCHAR(36) NOT NULL,
+    role_id     VARCHAR(36) NOT NULL REFERENCES identity_roles(id) ON DELETE CASCADE,
     claim_type  VARCHAR(256),
     claim_value VARCHAR(256)
 );
@@ -58,13 +63,13 @@ CREATE TABLE IF NOT EXISTS identity_user_logins (
     login_provider        VARCHAR(128) NOT NULL,
     provider_key          VARCHAR(128) NOT NULL,
     provider_display_name VARCHAR(128),
-    user_id               VARCHAR(36)  NOT NULL,
+    user_id               VARCHAR(36)  NOT NULL REFERENCES identity_users(id) ON DELETE CASCADE,
     PRIMARY KEY (login_provider, provider_key)
 );
 CREATE INDEX IF NOT EXISTS ix_identity_user_logins_user ON identity_user_logins (user_id);
 
 CREATE TABLE IF NOT EXISTS identity_user_tokens (
-    user_id        VARCHAR(36)  NOT NULL,
+    user_id        VARCHAR(36)  NOT NULL REFERENCES identity_users(id) ON DELETE CASCADE,
     login_provider VARCHAR(128) NOT NULL,
     name           VARCHAR(128) NOT NULL,
     value          TEXT,

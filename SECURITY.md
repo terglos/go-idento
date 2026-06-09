@@ -25,6 +25,21 @@ mitigation as quickly as is practical.
 - SMS verification codes cap wrong guesses per issued code
   (`PhoneTokenMaxAttempts`) and the embedded PBKDF2 iteration count is bounded on
   verify, so a crafted stored hash cannot force unbounded work.
+- Refresh tokens are rotated on every use and carry a server-side expiry
+  (`RefreshTokenTTL`, sliding on rotation), so a stolen, dormant token dies at
+  the TTL.
+
+## Known limitations
+
+- **TOTP replay within the step.** A valid TOTP code is accepted more than once
+  inside its 30-second step (±1 step skew). Used-code tracking is not
+  implemented — consistent with common authenticator deployments; the window is
+  ≤90 s.
+- **Recovery-code redemption race.** Redeeming a recovery code is a
+  read-modify-write on the user-token store without per-token optimistic
+  concurrency, so two perfectly concurrent redemptions of the *same* code can
+  both succeed. The window is microseconds and the code is still consumed;
+  treat recovery codes as single-use-best-effort under extreme concurrency.
 - Run `govulncheck ./...` to check for known issues in dependencies and the Go
   toolchain; build releases with a current, patched Go toolchain.
 

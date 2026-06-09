@@ -5,6 +5,8 @@ import (
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/base64"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -24,10 +26,13 @@ type TokenOptions struct {
 	// SigningKey is the HMAC secret used when Signer is nil (back-compat).
 	SigningKey []byte
 	// Signer, when set, overrides SigningKey and enables RS256/ES256 + rotation.
-	Signer          Signer
-	Issuer          string
-	Audience        string
-	AccessTokenTTL  time.Duration
+	Signer         Signer
+	Issuer         string
+	Audience       string
+	AccessTokenTTL time.Duration
+	// RefreshTokenTTL bounds how long an issued refresh token stays redeemable.
+	// The expiry is stamped server-side at issuance and re-stamped on each
+	// rotation (sliding window); Refresh rejects an expired token.
 	RefreshTokenTTL time.Duration
 }
 
@@ -92,7 +97,7 @@ func (t *TokenServiceOf[T, PT]) IssuePair(ctx context.Context, u PT) (*TokenPair
 	if err != nil {
 		return nil, err
 	}
-	now := time.Now()
+	now := nowFn()
 	exp := now.Add(t.Options.AccessTokenTTL)
 
 	claims := jwt.MapClaims{
@@ -133,7 +138,11 @@ func (t *TokenServiceOf[T, PT]) IssuePair(ctx context.Context, u PT) (*TokenPair
 	}
 
 	refresh := randomToken()
-	if err := t.Users.Store.SetToken(ctx, u, refreshTokenProvider, refreshTokenName, hashRefresh(refresh)); err != nil {
+	// Stored value: "<hash>:<expiryUnix>" so RefreshTokenTTL is enforced
+	// server-side. Each rotation re-stamps the expiry (sliding window).
+	refreshExp := now.Add(t.Options.RefreshTokenTTL).Unix()
+	stored := hashRefresh(refresh) + ":" + strconv.FormatInt(refreshExp, 10)
+	if err := t.Users.Store.SetToken(ctx, u, refreshTokenProvider, refreshTokenName, stored); err != nil {
 		return nil, err
 	}
 
@@ -170,13 +179,24 @@ func (t *TokenServiceOf[T, PT]) ValidateAccessToken(ctx context.Context, tokenSt
 	return u, claims, nil
 }
 
-// Refresh swaps a valid refresh token for a new token pair (rotation).
+// Refresh swaps a valid, unexpired refresh token for a new token pair
+// (rotation). RefreshTokenTTL is enforced against the expiry stamped when the
+// token was issued; rotation re-stamps it, so an actively-used session slides
+// while a stolen, dormant token dies at the TTL.
 func (t *TokenServiceOf[T, PT]) Refresh(ctx context.Context, u PT, refreshToken string) (*TokenPair, error) {
 	stored, err := t.Users.Store.GetToken(ctx, u, refreshTokenProvider, refreshTokenName)
-	if err != nil {
+	if err != nil || stored == "" {
 		return nil, ErrInvalidToken
 	}
-	if stored == "" || subtle.ConstantTimeCompare([]byte(stored), []byte(hashRefresh(refreshToken))) != 1 {
+	hashPart, expPart, ok := strings.Cut(stored, ":")
+	if !ok {
+		return nil, ErrInvalidToken // legacy/unknown format: fail closed
+	}
+	exp, err := strconv.ParseInt(expPart, 10, 64)
+	if err != nil || nowFn().After(time.Unix(exp, 0)) {
+		return nil, ErrInvalidToken // expired
+	}
+	if subtle.ConstantTimeCompare([]byte(hashPart), []byte(hashRefresh(refreshToken))) != 1 {
 		return nil, ErrInvalidToken
 	}
 	return t.IssuePair(ctx, u) // SetToken overwrites the old refresh token

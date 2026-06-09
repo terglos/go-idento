@@ -4,6 +4,29 @@ Notable changes per release. Versions follow [SemVer](https://semver.org). This
 is a multi-module repo; all modules (`.`, `stores/gormstore`, `stores/pgxstore`,
 `stores/pgxsqlc`) share the same version tag.
 
+## v0.3.4
+
+Token-lifetime and schema-source hardening (fourth double-check).
+
+### Fixed (security)
+- **`RefreshTokenTTL` is now actually enforced.** Refresh tokens were stored as
+  a bare hash with no expiry, so `Refresh` accepted a stolen token forever;
+  `RefreshTokenTTL` was dead configuration. The stored value now carries a
+  server-side expiry stamped at issuance and re-stamped on each rotation
+  (sliding window); `Refresh` rejects expired tokens.
+  **Upgrade note:** refresh tokens issued before v0.3.4 are rejected (fail
+  closed) — users simply sign in again once.
+- **Canonical schema and Atlas baseline gained the cascade FKs** they had been
+  missing since v0.2.0: `identity/migrations/postgres.sql` now declares
+  `ON DELETE CASCADE` on all satellite tables (matching the pgx stores), and a
+  new versioned migration (`migrations/20260609000001_cascade_fks.sql`) upgrades
+  existing databases — cleaning orphan rows first, then adding the constraints.
+
+### Docs
+- `SECURITY.md` documents two known limitations: TOTP replay inside the 30 s
+  step (standard practice) and the theoretical recovery-code double-redeem race
+  under perfectly concurrent requests.
+
 ## v0.3.3
 
 Store behavioral-parity pass (third double-check): the same manager call now
