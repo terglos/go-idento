@@ -25,6 +25,12 @@ func (m *UserManagerOf[T, PT]) FindByLogin(ctx context.Context, loginProvider, p
 // ExternalLoginSignIn signs in a user via an external login, applying the same
 // lockout/confirmation rules as password sign-in. Returns the result and the
 // user (nil when no account is linked to the external login).
+//
+// SECURITY: loginProvider/providerKey are trusted as already-verified identity.
+// The caller MUST have validated them against the provider first — i.e. verified
+// the OAuth/OIDC ID-token signature (against the provider JWKS) and its
+// iss/aud/exp, then taken providerKey from the validated "sub" claim. Passing
+// unverified, user-controlled values here allows signing in as any linked user.
 func (s *SignInManagerOf[T, PT]) ExternalLoginSignIn(ctx context.Context, loginProvider, providerKey string) (SignInResult, PT) {
 	u, err := s.Users.FindByLogin(ctx, loginProvider, providerKey)
 	if err != nil || u == nil {

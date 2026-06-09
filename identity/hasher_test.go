@@ -1,6 +1,28 @@
 package identity
 
-import "testing"
+import (
+	"encoding/base64"
+	"encoding/binary"
+	"testing"
+)
+
+// TestPasswordHasherRejectsHugeIterations ensures a crafted hash with an absurd
+// iteration count is rejected outright (returns fast, fails closed) rather than
+// burning unbounded CPU in pbkdf2.Key — an algorithmic-DoS guard.
+func TestPasswordHasherRejectsHugeIterations(t *testing.T) {
+	salt := make([]byte, 16)
+	subkey := make([]byte, 32)
+	buf := make([]byte, 13+len(salt)+len(subkey))
+	buf[0] = 0x01
+	binary.BigEndian.PutUint32(buf[1:5], uint32(prfSHA256))
+	binary.BigEndian.PutUint32(buf[5:9], 0xFFFFFFFF) // ~4.3 billion iterations
+	binary.BigEndian.PutUint32(buf[9:13], uint32(len(salt)))
+	enc := base64.StdEncoding.EncodeToString(buf)
+
+	if ok, rehash := (&pbkdf2Hasher{}).Verify(&User{}, enc, "whatever"); ok || rehash {
+		t.Fatalf("hash with out-of-bounds iteration count must be rejected, got ok=%v rehash=%v", ok, rehash)
+	}
+}
 
 func TestPasswordHasherRoundTrip(t *testing.T) {
 	h := NewPasswordHasher()

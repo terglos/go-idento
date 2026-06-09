@@ -4,6 +4,24 @@ Notable changes per release. Versions follow [SemVer](https://semver.org). This
 is a multi-module repo; all modules (`.`, `stores/gormstore`, `stores/pgxstore`,
 `stores/pgxsqlc`) share the same version tag.
 
+## v0.3.2
+
+Hardening pass (second double-check; core crypto/token review).
+
+### Fixed
+- **PBKDF2 algorithmic-DoS guard**: `Verify` now bounds the iteration count
+  embedded in a stored hash (`1 .. 10_000_000`); a crafted hash can no longer
+  force an unbounded-work derivation. Fails closed.
+- **Constant-time refresh-token check**: `TokenService.Refresh` compares the
+  stored refresh-token hash with `crypto/subtle.ConstantTimeCompare` (consistent
+  with password/2FA/recovery-code comparisons).
+
+### Docs
+- `SECURITY.md` documents caller responsibilities: CSRF on cookie-authenticated
+  state-changing endpoints, and verifying the OAuth/OIDC token before calling
+  `ExternalLoginSignIn`. The same contract is noted on the `ExternalLoginSignIn`
+  doc comment.
+
 ## v0.3.1
 
 Hardening pass (post-v0.3.0 double-check).

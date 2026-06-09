@@ -32,6 +32,11 @@ const (
 	prfSHA512 PRF = 2
 )
 
+// maxPBKDF2Iterations caps the iteration count accepted from a stored hash, so a
+// crafted hash can't force an unbounded-work derivation (algorithmic DoS). It is
+// far above any reasonable configured default.
+const maxPBKDF2Iterations = 10_000_000
+
 // pbkdf2Hasher implements a versioned PBKDF2 hash format. The encoded value is:
 //
 //	{ 0x01, prf (uint32 BE), iterCount (uint32 BE), saltLen (uint32 BE), salt, subkey }
@@ -91,6 +96,12 @@ func (h *pbkdf2Hasher) Verify(_ *User, encoded, password string) (ok, needsRehas
 	iter := int(binary.BigEndian.Uint32(data[5:9]))
 	saltLen := int(binary.BigEndian.Uint32(data[9:13]))
 	if saltLen < 8 || len(data) < 13+saltLen+1 {
+		return false, false
+	}
+	// Bound the embedded iteration count: a crafted hash with a huge count would
+	// otherwise let a single verification burn unbounded CPU (algorithmic DoS).
+	// maxPBKDF2Iterations sits well above any sane configured default.
+	if iter < 1 || iter > maxPBKDF2Iterations {
 		return false, false
 	}
 	salt := data[13 : 13+saltLen]

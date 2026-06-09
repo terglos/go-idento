@@ -3,6 +3,7 @@ package identity
 import (
 	"context"
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/base64"
 	"time"
 
@@ -175,7 +176,7 @@ func (t *TokenServiceOf[T, PT]) Refresh(ctx context.Context, u PT, refreshToken 
 	if err != nil {
 		return nil, ErrInvalidToken
 	}
-	if stored == "" || stored != hashRefresh(refreshToken) {
+	if stored == "" || subtle.ConstantTimeCompare([]byte(stored), []byte(hashRefresh(refreshToken))) != 1 {
 		return nil, ErrInvalidToken
 	}
 	return t.IssuePair(ctx, u) // SetToken overwrites the old refresh token
