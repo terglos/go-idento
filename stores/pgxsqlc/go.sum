@@ -20,8 +20,8 @@ github.com/stretchr/testify v1.3.0/go.mod h1:M5WIy9Dh21IEIfnGCwXGc5bZfKNJtfHm1UV
 github.com/stretchr/testify v1.7.0/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/h/Wwjteg=
 github.com/stretchr/testify v1.11.1 h1:7s2iGBzp5EwR7/aIZr8ao5+dra3wiQyKjjFuvgVKu7U=
 github.com/stretchr/testify v1.11.1/go.mod h1:wZwfW3scLgRK+23gO65QZefKpKQRnfz6sD981Nm4B6U=
-github.com/terglos/go-idento v0.3.4 h1:grtm4L4vVu79H5aukPD+kB0cVNRGa/ibm1mPFjyt+YI=
-github.com/terglos/go-idento v0.3.4/go.mod h1:xedFehGkWA7BotggfoTnrR62L5AzP9hC2S+zvTxIzkg=
+github.com/terglos/go-idento v0.3.5 h1:0lFZGLaSujZ8ERAODYrJellKP72Sz1zVkpQ4PdC87I0=
+github.com/terglos/go-idento v0.3.5/go.mod h1:hmziWV6HVcSK6AogN9DNORRKWYa0X6kX9hITjw9IIzc=
 golang.org/x/crypto v0.53.0 h1:QZ4Muo8THX6CizN2vPPd5fBGHyogrdK9fG4wLPFUsto=
 golang.org/x/crypto v0.53.0/go.mod h1:DNLU434OwVakk9PzuwV8w62mAJpRJL3vsgcfp4Qnsio=
 golang.org/x/sync v0.21.0 h1:HLII4xRRTtCRkxYp4HNFF0Js/Og6q2i++KXbg0gHCwM=
