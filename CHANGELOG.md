@@ -4,6 +4,29 @@ Notable changes per release. Versions follow [SemVer](https://semver.org). This
 is a multi-module repo; all modules (`.`, `stores/gormstore`, `stores/pgxstore`,
 `stores/pgxsqlc`) share the same version tag.
 
+## v0.3.5
+
+Toolchain + robustness pass (fifth double-check; signers/middleware re-read,
+example smoke-tested end to end).
+
+### Fixed
+- **Pinned `toolchain go1.26.4`** in every module (and `go.work`): builds pick
+  up the patched standard library — `govulncheck` is now clean across all four
+  modules (was flagging GO-2026-5037/5039/4971 in the 1.26.2 stdlib).
+- **`RefreshTokenTTL` zero-value footgun**: a manually-constructed
+  `TokenOptions` without the field no longer yields instantly-expired refresh
+  tokens — an unset TTL falls back to 7 days (mirrors `NewDataTokenProvider`).
+
+### Improved
+- The `httpserver` example accepts a `PORT` env var (was hard-coded :8080) and
+  was smoke-tested end to end: register → login → `/me` (401 anonymous / 200
+  authenticated) → `/admin` (403 without the role).
+
+### Docs
+- `SECURITY.md` notes the SMS-code attempt-counter race (same class as the
+  recovery-code one); the cascade-FKs migration documents that databases
+  created by the pgx stores' `Migrate` already carry the FKs (skip it there).
+
 ## v0.3.4
 
 Token-lifetime and schema-source hardening (fourth double-check).

@@ -40,6 +40,10 @@ mitigation as quickly as is practical.
   concurrency, so two perfectly concurrent redemptions of the *same* code can
   both succeed. The window is microseconds and the code is still consumed;
   treat recovery codes as single-use-best-effort under extreme concurrency.
+- **SMS-code attempt counter race.** The wrong-guess counter on a phone code is
+  the same read-modify-write pattern, so perfectly concurrent wrong guesses can
+  lose an increment (one extra guess before invalidation). The 5-minute expiry
+  and the cap itself still bound the attack.
 - Run `govulncheck ./...` to check for known issues in dependencies and the Go
   toolchain; build releases with a current, patched Go toolchain.
 

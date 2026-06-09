@@ -1,7 +1,7 @@
 // Command httpserver is a minimal end-to-end demo: register, login (JWT +
 // cookie) and a role-protected endpoint, all wired from the identity core.
 //
-//	go run ./examples/httpserver
+//	go run ./examples/httpserver        # listens on :8080 (override with PORT)
 //	curl -s localhost:8080/register -d '{"userName":"jane","email":"m@x.com","password":"Abcdef1!"}'
 //	curl -s localhost:8080/login    -d '{"userName":"jane","password":"Abcdef1!"}'
 //	curl -s localhost:8080/me -H "Authorization: Bearer <accessToken>"
@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"os"
 
 	"github.com/glebarez/sqlite"
 	"github.com/terglos/go-idento/auth"
@@ -81,7 +82,12 @@ func main() {
 
 	handler := auth.Middleware(tokens, cookies)(mux)
 	log.Println("listening on :8080")
-	log.Fatal(http.ListenAndServe(":8080", handler))
+	addr := ":8080"
+	if p := os.Getenv("PORT"); p != "" {
+		addr = ":" + p
+	}
+	log.Printf("listening on %s", addr)
+	log.Fatal(http.ListenAndServe(addr, handler))
 }
 
 func writeJSON(w http.ResponseWriter, v any) {

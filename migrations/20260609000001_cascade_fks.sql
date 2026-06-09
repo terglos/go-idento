@@ -3,6 +3,11 @@
 -- schema (identity/migrations/postgres.sql) and the pgx stores' Migrate.
 -- Orphan rows (references to since-deleted users/roles) are removed first so
 -- the constraints can be validated.
+--
+-- Intended for databases created from the baseline migration. A database
+-- created by pgxstore.Migrate/pgxsqlc.Migrate already has these FKs under
+-- auto-generated names; running this there adds redundant (harmless) duplicate
+-- constraints — skip it in that case.
 
 DELETE FROM identity_user_roles ur WHERE NOT EXISTS (SELECT 1 FROM identity_users u WHERE u.id = ur.user_id);
 DELETE FROM identity_user_roles ur WHERE NOT EXISTS (SELECT 1 FROM identity_roles r WHERE r.id = ur.role_id);

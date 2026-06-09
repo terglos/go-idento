@@ -139,8 +139,14 @@ func (t *TokenServiceOf[T, PT]) IssuePair(ctx context.Context, u PT) (*TokenPair
 
 	refresh := randomToken()
 	// Stored value: "<hash>:<expiryUnix>" so RefreshTokenTTL is enforced
-	// server-side. Each rotation re-stamps the expiry (sliding window).
-	refreshExp := now.Add(t.Options.RefreshTokenTTL).Unix()
+	// server-side. Each rotation re-stamps the expiry (sliding window). An
+	// unset TTL falls back to 7 days (mirrors NewDataTokenProvider) so manual
+	// TokenOptions construction doesn't yield instantly-expired tokens.
+	ttl := t.Options.RefreshTokenTTL
+	if ttl <= 0 {
+		ttl = 7 * 24 * time.Hour
+	}
+	refreshExp := now.Add(ttl).Unix()
 	stored := hashRefresh(refresh) + ":" + strconv.FormatInt(refreshExp, 10)
 	if err := t.Users.Store.SetToken(ctx, u, refreshTokenProvider, refreshTokenName, stored); err != nil {
 		return nil, err
