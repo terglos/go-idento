@@ -1,5 +1,10 @@
 # go-idento
 
+[![Go Reference](https://pkg.go.dev/badge/github.com/terglos/go-idento.svg)](https://pkg.go.dev/github.com/terglos/go-idento)
+[![Go Report Card](https://goreportcard.com/badge/github.com/terglos/go-idento)](https://goreportcard.com/report/github.com/terglos/go-idento)
+[![CI](https://github.com/terglos/go-idento/actions/workflows/ci.yml/badge.svg)](https://github.com/terglos/go-idento/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
+
 A complete, batteries-included **identity framework for Go** — user/role
 management, password hashing, claims, lockout, two-factor and JWT, built on
 pluggable stores so the persistence layer can be swapped without touching
