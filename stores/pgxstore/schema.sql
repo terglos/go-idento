@@ -1,0 +1,70 @@
+-- go-identity schema for PostgreSQL (raw, no ORM). Mirrors the AspNet* layout.
+CREATE TABLE IF NOT EXISTS identity_users (
+    id                     VARCHAR(36) PRIMARY KEY,
+    user_name              VARCHAR(256),
+    normalized_user_name   VARCHAR(256),
+    email                  VARCHAR(256),
+    normalized_email       VARCHAR(256),
+    email_confirmed        BOOLEAN      NOT NULL DEFAULT FALSE,
+    password_hash          VARCHAR(256),
+    security_stamp         VARCHAR(64),
+    concurrency_stamp      VARCHAR(64),
+    phone_number           VARCHAR(32),
+    phone_number_confirmed BOOLEAN      NOT NULL DEFAULT FALSE,
+    two_factor_enabled     BOOLEAN      NOT NULL DEFAULT FALSE,
+    lockout_end            TIMESTAMPTZ,
+    lockout_enabled        BOOLEAN      NOT NULL DEFAULT FALSE,
+    access_failed_count    INT          NOT NULL DEFAULT 0,
+    attributes             JSONB        NOT NULL DEFAULT '{}'::jsonb,
+    created_at             TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    updated_at             TIMESTAMPTZ  NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_identity_users_uname ON identity_users (normalized_user_name);
+CREATE INDEX IF NOT EXISTS ix_identity_users_email ON identity_users (normalized_email);
+
+CREATE TABLE IF NOT EXISTS identity_roles (
+    id                VARCHAR(36) PRIMARY KEY,
+    name              VARCHAR(256),
+    normalized_name   VARCHAR(256),
+    concurrency_stamp VARCHAR(64)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_identity_roles_name ON identity_roles (normalized_name);
+
+CREATE TABLE IF NOT EXISTS identity_user_roles (
+    user_id VARCHAR(36) NOT NULL,
+    role_id VARCHAR(36) NOT NULL,
+    PRIMARY KEY (user_id, role_id)
+);
+
+CREATE TABLE IF NOT EXISTS identity_user_claims (
+    id          BIGSERIAL PRIMARY KEY,
+    user_id     VARCHAR(36) NOT NULL,
+    claim_type  VARCHAR(256),
+    claim_value VARCHAR(256)
+);
+CREATE INDEX IF NOT EXISTS ix_identity_user_claims_user ON identity_user_claims (user_id);
+
+CREATE TABLE IF NOT EXISTS identity_role_claims (
+    id          BIGSERIAL PRIMARY KEY,
+    role_id     VARCHAR(36) NOT NULL,
+    claim_type  VARCHAR(256),
+    claim_value VARCHAR(256)
+);
+CREATE INDEX IF NOT EXISTS ix_identity_role_claims_role ON identity_role_claims (role_id);
+
+CREATE TABLE IF NOT EXISTS identity_user_logins (
+    login_provider        VARCHAR(128) NOT NULL,
+    provider_key          VARCHAR(128) NOT NULL,
+    provider_display_name VARCHAR(128),
+    user_id               VARCHAR(36)  NOT NULL,
+    PRIMARY KEY (login_provider, provider_key)
+);
+CREATE INDEX IF NOT EXISTS ix_identity_user_logins_user ON identity_user_logins (user_id);
+
+CREATE TABLE IF NOT EXISTS identity_user_tokens (
+    user_id        VARCHAR(36)  NOT NULL,
+    login_provider VARCHAR(128) NOT NULL,
+    name           VARCHAR(128) NOT NULL,
+    value          TEXT,
+    PRIMARY KEY (user_id, login_provider, name)
+);

@@ -1,0 +1,8 @@
+*.db
+*.db-journal
+/dist/
+/bin/
+.env
+cover.out
+coverage.*
+.claude/
