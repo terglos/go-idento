@@ -4,7 +4,7 @@ go 1.26
 
 require (
 	github.com/glebarez/sqlite v1.11.0
-	github.com/terglos/go-idento v0.0.0
+	github.com/terglos/go-idento v0.1.0
 	gorm.io/gorm v1.31.1
 )
 
@@ -25,5 +25,3 @@ require (
 	modernc.org/memory v1.5.0 // indirect
 	modernc.org/sqlite v1.23.1 // indirect
 )
-
-replace github.com/terglos/go-idento => ../..

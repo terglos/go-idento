@@ -4,7 +4,7 @@ go 1.26
 
 require (
 	github.com/jackc/pgx/v5 v5.10.0
-	github.com/terglos/go-idento v0.0.0
+	github.com/terglos/go-idento v0.1.0
 )
 
 require (
@@ -17,5 +17,3 @@ require (
 	golang.org/x/sync v0.21.0 // indirect
 	golang.org/x/text v0.38.0 // indirect
 )
-
-replace github.com/terglos/go-idento => ../..
