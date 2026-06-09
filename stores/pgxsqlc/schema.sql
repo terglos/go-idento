@@ -33,14 +33,14 @@ CREATE TABLE IF NOT EXISTS identity_roles (
 CREATE UNIQUE INDEX IF NOT EXISTS ux_identity_roles_name ON identity_roles (normalized_name);
 
 CREATE TABLE IF NOT EXISTS identity_user_roles (
-    user_id varchar(36) NOT NULL,
-    role_id varchar(36) NOT NULL,
+    user_id varchar(36) NOT NULL REFERENCES identity_users(id) ON DELETE CASCADE,
+    role_id varchar(36) NOT NULL REFERENCES identity_roles(id) ON DELETE CASCADE,
     PRIMARY KEY (user_id, role_id)
 );
 
 CREATE TABLE IF NOT EXISTS identity_user_claims (
     id          bigserial PRIMARY KEY,
-    user_id     varchar(36)  NOT NULL,
+    user_id     varchar(36)  NOT NULL REFERENCES identity_users(id) ON DELETE CASCADE,
     claim_type  varchar(256) NOT NULL DEFAULT '',
     claim_value varchar(256) NOT NULL DEFAULT ''
 );
@@ -48,7 +48,7 @@ CREATE INDEX IF NOT EXISTS ix_identity_user_claims_user ON identity_user_claims 
 
 CREATE TABLE IF NOT EXISTS identity_role_claims (
     id          bigserial PRIMARY KEY,
-    role_id     varchar(36)  NOT NULL,
+    role_id     varchar(36)  NOT NULL REFERENCES identity_roles(id) ON DELETE CASCADE,
     claim_type  varchar(256) NOT NULL DEFAULT '',
     claim_value varchar(256) NOT NULL DEFAULT ''
 );
@@ -58,13 +58,13 @@ CREATE TABLE IF NOT EXISTS identity_user_logins (
     login_provider        varchar(128) NOT NULL,
     provider_key          varchar(128) NOT NULL,
     provider_display_name varchar(128) NOT NULL DEFAULT '',
-    user_id               varchar(36)  NOT NULL,
+    user_id               varchar(36)  NOT NULL REFERENCES identity_users(id) ON DELETE CASCADE,
     PRIMARY KEY (login_provider, provider_key)
 );
 CREATE INDEX IF NOT EXISTS ix_identity_user_logins_user ON identity_user_logins (user_id);
 
 CREATE TABLE IF NOT EXISTS identity_user_tokens (
-    user_id        varchar(36)  NOT NULL,
+    user_id        varchar(36)  NOT NULL REFERENCES identity_users(id) ON DELETE CASCADE,
     login_provider varchar(128) NOT NULL,
     name           varchar(128) NOT NULL,
     value          text         NOT NULL DEFAULT '',

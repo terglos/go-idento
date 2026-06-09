@@ -91,6 +91,20 @@ func (s *userStore) Delete(_ context.Context, u *identity.User) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(s.users, u.ID)
+	// Cascade: drop the user's memberships, claims, tokens and logins.
+	delete(s.userRoles, u.ID)
+	delete(s.userClaims, u.ID)
+	for k := range s.tokens {
+		if strings.HasPrefix(k, u.ID+"|") {
+			delete(s.tokens, k)
+		}
+	}
+	for k, uid := range s.loginUser {
+		if uid == u.ID {
+			delete(s.loginUser, k)
+			delete(s.logins, k)
+		}
+	}
 	return nil
 }
 
@@ -313,6 +327,14 @@ func (s *roleStore) Create(_ context.Context, r *identity.Role) error {
 func (s *roleStore) Update(_ context.Context, r *identity.Role) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	cur, ok := s.roles[r.ID]
+	if !ok {
+		return identity.ErrNotFound
+	}
+	if cur.ConcurrencyStamp != r.ConcurrencyStamp {
+		return identity.ErrConcurrencyFailure // a concurrent write won
+	}
+	r.ConcurrencyStamp = identity.NewConcurrencyStamp() // rotate on success
 	s.roles[r.ID] = cloneRole(r)
 	return nil
 }

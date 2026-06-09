@@ -612,25 +612,43 @@ func (q *Queries) RemoveUserLogin(ctx context.Context, arg RemoveUserLoginParams
 	return err
 }
 
-const updateRole = `-- name: UpdateRole :exec
-UPDATE identity_roles SET name=$2, normalized_name=$3, concurrency_stamp=$4 WHERE id=$1
+const roleExists = `-- name: RoleExists :one
+SELECT EXISTS(SELECT 1 FROM identity_roles WHERE id=$1)
+`
+
+func (q *Queries) RoleExists(ctx context.Context, id string) (bool, error) {
+	row := q.db.QueryRow(ctx, roleExists, id)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const updateRole = `-- name: UpdateRole :execrows
+UPDATE identity_roles SET name = $1, normalized_name = $2,
+    concurrency_stamp = $3
+WHERE id = $4 AND concurrency_stamp = $5
 `
 
 type UpdateRoleParams struct {
-	ID               string
-	Name             string
-	NormalizedName   string
-	ConcurrencyStamp string
+	Name                string
+	NormalizedName      string
+	NewConcurrencyStamp string
+	ID                  string
+	OldConcurrencyStamp string
 }
 
-func (q *Queries) UpdateRole(ctx context.Context, arg UpdateRoleParams) error {
-	_, err := q.db.Exec(ctx, updateRole,
-		arg.ID,
+func (q *Queries) UpdateRole(ctx context.Context, arg UpdateRoleParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateRole,
 		arg.Name,
 		arg.NormalizedName,
-		arg.ConcurrencyStamp,
+		arg.NewConcurrencyStamp,
+		arg.ID,
+		arg.OldConcurrencyStamp,
 	)
-	return err
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const updateUser = `-- name: UpdateUser :execrows

@@ -286,7 +286,22 @@ func (s *RoleStore) Create(ctx context.Context, r *identity.Role) error {
 }
 
 func (s *RoleStore) Update(ctx context.Context, r *identity.Role) error {
-	return s.q.UpdateRole(ctx, gen.UpdateRoleParams{ID: r.ID, Name: r.Name, NormalizedName: r.NormalizedName, ConcurrencyStamp: r.ConcurrencyStamp})
+	newStamp := identity.NewConcurrencyStamp()
+	n, err := s.q.UpdateRole(ctx, gen.UpdateRoleParams{
+		ID: r.ID, Name: r.Name, NormalizedName: r.NormalizedName,
+		NewConcurrencyStamp: newStamp, OldConcurrencyStamp: r.ConcurrencyStamp,
+	})
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		if exists, e := s.q.RoleExists(ctx, r.ID); e == nil && !exists {
+			return identity.ErrNotFound
+		}
+		return identity.ErrConcurrencyFailure
+	}
+	r.ConcurrencyStamp = newStamp
+	return nil
 }
 
 func (s *RoleStore) Delete(ctx context.Context, r *identity.Role) error {

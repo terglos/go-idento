@@ -107,4 +107,44 @@ func TestSqlcIntegration(t *testing.T) {
 	if page, total, err := um.ListUsers(ctx, identity.ListFilter{Search: "sqlc"}); err != nil || total < 1 || len(page) < 1 {
 		t.Fatalf("list users: err=%v total=%d page=%d", err, total, len(page))
 	}
+
+	// Role optimistic concurrency through the sqlc store.
+	r1, _ := rm.FindByName(ctx, "Admin")
+	r2, _ := rm.FindByName(ctx, "Admin")
+	r1.Name = "Administrators"
+	if err := rm.Update(ctx, r1); err != nil {
+		t.Fatalf("first role update should win: %v", err)
+	}
+	r2.Name = "Superusers"
+	if err := rm.Update(ctx, r2); err != identity.ErrConcurrencyFailure {
+		t.Fatalf("stale role update must fail with ErrConcurrencyFailure, got %v", err)
+	}
+
+	// Delete cascades to satellite rows via the ON DELETE CASCADE FKs.
+	if err := um.AddClaims(ctx, signed, identity.Claim{Type: "dept", Value: "eng"}); err != nil {
+		t.Fatalf("add claim: %v", err)
+	}
+	if err := um.Delete(ctx, signed); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	if got, _ := um.FindByID(ctx, signed.ID); got != nil {
+		t.Fatal("user should be deleted")
+	}
+	for _, q := range []struct {
+		table string
+		sql   string
+	}{
+		{"identity_user_roles", "SELECT count(*) FROM identity_user_roles WHERE user_id = $1"},
+		{"identity_user_claims", "SELECT count(*) FROM identity_user_claims WHERE user_id = $1"},
+		{"identity_user_logins", "SELECT count(*) FROM identity_user_logins WHERE user_id = $1"},
+		{"identity_user_tokens", "SELECT count(*) FROM identity_user_tokens WHERE user_id = $1"},
+	} {
+		var n int64
+		if err := pool.QueryRow(ctx, q.sql, signed.ID).Scan(&n); err != nil {
+			t.Fatalf("count %s: %v", q.table, err)
+		}
+		if n != 0 {
+			t.Fatalf("%s should cascade-delete, got %d rows", q.table, n)
+		}
+	}
 }

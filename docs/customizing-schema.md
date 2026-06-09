@@ -42,9 +42,12 @@ names.Roles = "account_roles"
 pgxstore.NewUserStore(pool, pgxstore.WithTableNames(names))
 ```
 
-The pgx `Migrate` also adds **`ON DELETE CASCADE`** foreign keys from the
-satellite tables to users/roles, so deleting a user/role cleans up its
-memberships, claims, logins and tokens (referential integrity).
+Deleting a user (or role) cleans up its memberships, claims, logins and tokens
+across **every** store: the Postgres stores (`pgxstore`, `pgxsqlc`) add
+**`ON DELETE CASCADE`** foreign keys in `Migrate`, while the GORM and in-memory
+stores delete the satellite rows in a single transaction. Role updates likewise
+use optimistic concurrency (`ConcurrencyStamp`) in all stores, returning
+`identity.ErrConcurrencyFailure` on a stale write.
 
 > The **sqlc** store (`stores/pgxsqlc`) uses compile-time-fixed SQL, so it cannot
 > rename identifiers; use a connection `search_path` to place its canonical

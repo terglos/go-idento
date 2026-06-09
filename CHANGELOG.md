@@ -4,6 +4,26 @@ Notable changes per release. Versions follow [SemVer](https://semver.org). This
 is a multi-module repo; all modules (`.`, `stores/gormstore`, `stores/pgxstore`,
 `stores/pgxsqlc`) share the same version tag.
 
+## v0.2.1
+
+### Added
+- `UserManager.Delete` and `RoleManager.Update` — the manager layer now exposes
+  user deletion and role rename (the latter under optimistic concurrency).
+- `identity.Naming.Validate` (and `ErrInvalidIdentifier`): stores reject schema
+  or table names that are not safe SQL identifiers before running migrations,
+  hardening the configurable-schema feature against injection.
+
+### Changed / Fixed
+- **Cascade delete parity**: deleting a user now removes its roles, claims,
+  logins and tokens in **every** store — Postgres via `ON DELETE CASCADE`
+  (added to `pgxsqlc` too), GORM and in-memory via a single transaction.
+- **Role optimistic concurrency** is now enforced in all four stores
+  (`memstore`, `gormstore`, `pgxstore`, `pgxsqlc`): a stale `RoleStore.Update`
+  returns `ErrConcurrencyFailure`, mirroring user updates.
+- `ChangeEmail` re-checks `RequireUniqueEmail` at apply time, so a previously
+  minted token can no longer collide two accounts on one address.
+- `RedeemRecoveryCode` uses a constant-time comparison.
+
 ## v0.2.0
 
 ### Added

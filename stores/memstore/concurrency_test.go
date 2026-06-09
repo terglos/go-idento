@@ -47,3 +47,53 @@ func TestOptimisticConcurrency(t *testing.T) {
 		t.Fatalf("reloaded update should succeed: %v", err)
 	}
 }
+
+// Roles carry the same optimistic-concurrency guarantee as users.
+func TestRoleOptimisticConcurrency(t *testing.T) {
+	ctx := context.Background()
+	st := memstore.New()
+	rm := identity.NewRoleManager(st.Roles())
+
+	r := &identity.Role{Name: "Admin"}
+	if err := rm.Create(ctx, r); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	a, _ := rm.FindByID(ctx, r.ID)
+	b, _ := rm.FindByID(ctx, r.ID)
+
+	a.Name = "Administrator"
+	if err := rm.Update(ctx, a); err != nil {
+		t.Fatalf("first role update should succeed: %v", err)
+	}
+	if a.ConcurrencyStamp == b.ConcurrencyStamp {
+		t.Fatal("stamp should rotate after a successful update")
+	}
+
+	b.Name = "Superuser"
+	if err := rm.Update(ctx, b); !errors.Is(err, identity.ErrConcurrencyFailure) {
+		t.Fatalf("stale role update must fail with ErrConcurrencyFailure, got %v", err)
+	}
+
+	// Updating a non-existent role reports ErrNotFound.
+	ghost := &identity.Role{ID: "missing", Name: "Ghost", ConcurrencyStamp: "x"}
+	if err := rm.Update(ctx, ghost); !errors.Is(err, identity.ErrNotFound) {
+		t.Fatalf("expected ErrNotFound for missing role, got %v", err)
+	}
+}
+
+// A rename collision with another existing role is rejected.
+func TestRoleUpdateDuplicateName(t *testing.T) {
+	ctx := context.Background()
+	st := memstore.New()
+	rm := identity.NewRoleManager(st.Roles())
+
+	_ = rm.Create(ctx, &identity.Role{Name: "Admin"})
+	editor := &identity.Role{Name: "Editor"}
+	_ = rm.Create(ctx, editor)
+
+	editor.Name = "Admin" // collides with the existing role
+	if err := rm.Update(ctx, editor); !errors.Is(err, identity.ErrDuplicateRoleName) {
+		t.Fatalf("expected ErrDuplicateRoleName, got %v", err)
+	}
+}

@@ -18,7 +18,11 @@ import (
 //	pgxstore.Migrate(ctx, pool, pgxstore.WithSchema("auth"),
 //	                            pgxstore.WithTablePrefix("app_")) // auth.app_identity_users, ...
 func Migrate(ctx context.Context, db *pgxpool.Pool, opts ...Option) error {
-	_, err := db.Exec(ctx, buildDDL(resolve(opts...)))
+	n := resolve(opts...)
+	if err := n.Validate(); err != nil {
+		return err
+	}
+	_, err := db.Exec(ctx, buildDDL(n))
 	return err
 }
 

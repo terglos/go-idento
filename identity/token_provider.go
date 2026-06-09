@@ -7,6 +7,7 @@ import (
 	"crypto/subtle"
 	"encoding/base64"
 	"encoding/binary"
+	"errors"
 	"strings"
 	"time"
 )
@@ -133,8 +134,18 @@ func (m *UserManagerOf[T, PT]) ChangeEmail(ctx context.Context, u PT, newEmail, 
 	if m.Tokens == nil || !m.Tokens.Validate(purpose, token, b) {
 		return ErrInvalidToken
 	}
+	normalized := m.Normalizer.Normalize(newEmail)
+	// Re-enforce email uniqueness at apply time: a token minted earlier must not
+	// let two accounts collide on the same address.
+	if m.Options.User.RequireUniqueEmail && normalized != "" {
+		if existing, err := m.Store.FindByEmail(ctx, normalized); err == nil && existing != nil && existing.Base().ID != b.ID {
+			return ErrDuplicateEmail
+		} else if err != nil && !errors.Is(err, ErrNotFound) {
+			return err
+		}
+	}
 	b.Email = newEmail
-	b.NormalizedEmail = m.Normalizer.Normalize(newEmail)
+	b.NormalizedEmail = normalized
 	b.EmailConfirmed = true
 	b.SecurityStamp = newStamp()
 	return m.Store.Update(ctx, u)

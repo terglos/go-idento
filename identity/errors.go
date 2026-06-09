@@ -30,6 +30,7 @@ var (
 	ErrInvalidToken             = newErr("InvalidToken", "Invalid token.")
 	ErrConcurrencyFailure       = newErr("ConcurrencyFailure", "Optimistic concurrency failure, object has been modified.")
 	ErrListNotSupported         = newErr("ListNotSupported", "The configured store does not support listing.")
+	ErrInvalidIdentifier        = newErr("InvalidIdentifier", "A configured schema or table name is not a valid SQL identifier.")
 )
 
 // ErrNotFound is a sentinel that stores should return when a row is absent, so

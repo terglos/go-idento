@@ -104,8 +104,13 @@ SELECT user_id FROM identity_user_logins WHERE login_provider=$1 AND provider_ke
 INSERT INTO identity_roles (id, name, normalized_name, concurrency_stamp)
 VALUES ($1,$2,$3,$4);
 
--- name: UpdateRole :exec
-UPDATE identity_roles SET name=$2, normalized_name=$3, concurrency_stamp=$4 WHERE id=$1;
+-- name: UpdateRole :execrows
+UPDATE identity_roles SET name = @name, normalized_name = @normalized_name,
+    concurrency_stamp = @new_concurrency_stamp
+WHERE id = @id AND concurrency_stamp = @old_concurrency_stamp;
+
+-- name: RoleExists :one
+SELECT EXISTS(SELECT 1 FROM identity_roles WHERE id=$1);
 
 -- name: DeleteRole :exec
 DELETE FROM identity_roles WHERE id=$1;

@@ -99,7 +99,7 @@ type queries struct {
 	getUserClaims, addUserClaim, removeUserClaim   string
 	getToken, setToken, removeToken                string
 	addLogin, removeLogin, getLogins, findByLogin  string
-	createRole, updateRole, deleteRole             string
+	createRole, updateRole, deleteRole, roleExists string
 	findRoleByID, findRoleByName                   string
 	getRoleClaims, addRoleClaim, removeRoleClaim   string
 }
@@ -143,8 +143,9 @@ func buildQueries(n identity.Naming) queries {
 		getLogins:       fmt.Sprintf(`SELECT login_provider, provider_key, provider_display_name FROM %s WHERE user_id=$1`, UL),
 		findByLogin:     fmt.Sprintf(`SELECT user_id FROM %s WHERE login_provider=$1 AND provider_key=$2`, UL),
 		createRole:      fmt.Sprintf(`INSERT INTO %s (id, name, normalized_name, concurrency_stamp) VALUES ($1,$2,$3,$4)`, R),
-		updateRole:      fmt.Sprintf(`UPDATE %s SET name=$2, normalized_name=$3, concurrency_stamp=$4 WHERE id=$1`, R),
+		updateRole:      fmt.Sprintf(`UPDATE %s SET name=$2, normalized_name=$3, concurrency_stamp=$4 WHERE id=$1 AND concurrency_stamp=$5`, R),
 		deleteRole:      fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, R),
+		roleExists:      fmt.Sprintf(`SELECT EXISTS(SELECT 1 FROM %s WHERE id=$1)`, R),
 		findRoleByID:    fmt.Sprintf(`SELECT id, name, normalized_name, concurrency_stamp FROM %s WHERE id=$1`, R),
 		findRoleByName:  fmt.Sprintf(`SELECT id, name, normalized_name, concurrency_stamp FROM %s WHERE normalized_name=$1`, R),
 		getRoleClaims:   fmt.Sprintf(`SELECT claim_type, claim_value FROM %s WHERE role_id=$1`, RC),
@@ -388,8 +389,21 @@ func (s *RoleStore) Create(ctx context.Context, r *identity.Role) error {
 }
 
 func (s *RoleStore) Update(ctx context.Context, r *identity.Role) error {
-	_, err := s.db.Exec(ctx, s.q.updateRole, r.ID, r.Name, r.NormalizedName, r.ConcurrencyStamp)
-	return err
+	old := r.ConcurrencyStamp
+	newStamp := identity.NewConcurrencyStamp()
+	tag, err := s.db.Exec(ctx, s.q.updateRole, r.ID, r.Name, r.NormalizedName, newStamp, old)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		var exists bool
+		if e := s.db.QueryRow(ctx, s.q.roleExists, r.ID).Scan(&exists); e == nil && !exists {
+			return identity.ErrNotFound
+		}
+		return identity.ErrConcurrencyFailure
+	}
+	r.ConcurrencyStamp = newStamp
+	return nil
 }
 
 func (s *RoleStore) Delete(ctx context.Context, r *identity.Role) error {

@@ -31,6 +31,20 @@ func (m *RoleManager) Create(ctx context.Context, r *Role) error {
 	return m.Store.Create(ctx, r)
 }
 
+// Update renames a role (re-normalizing) and persists it under optimistic
+// concurrency. It rejects a name already used by a different role; the store
+// rotates ConcurrencyStamp on success and returns [ErrConcurrencyFailure] if the
+// role was modified concurrently.
+func (m *RoleManager) Update(ctx context.Context, r *Role) error {
+	r.NormalizedName = m.Normalizer.Normalize(r.Name)
+	if existing, err := m.Store.FindByName(ctx, r.NormalizedName); err == nil && existing != nil && existing.ID != r.ID {
+		return ErrDuplicateRoleName
+	} else if err != nil && !errors.Is(err, ErrNotFound) {
+		return err
+	}
+	return m.Store.Update(ctx, r)
+}
+
 func (m *RoleManager) Delete(ctx context.Context, r *Role) error { return m.Store.Delete(ctx, r) }
 
 func (m *RoleManager) FindByName(ctx context.Context, name string) (*Role, error) {

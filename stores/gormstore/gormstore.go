@@ -64,6 +64,20 @@ func resolveTables(n identity.Naming) tables {
 	}
 }
 
+// deleteUserCascade removes the user and all its satellite rows in one
+// transaction (portable across SQLite/MySQL/Postgres, where DB-level FKs may be
+// off or absent).
+func (t tables) deleteUserCascade(db *gorm.DB, userID string) error {
+	return db.Transaction(func(tx *gorm.DB) error {
+		for _, table := range []string{t.userRoles, t.userClaims, t.userLogins, t.userTokens} {
+			if err := tx.Exec(fmt.Sprintf("DELETE FROM %s WHERE user_id = ?", table), userID).Error; err != nil {
+				return err
+			}
+		}
+		return tx.Exec(fmt.Sprintf("DELETE FROM %s WHERE id = ?", t.users), userID).Error
+	})
+}
+
 // UserStore implements identity.UserStore over GORM.
 type UserStore struct {
 	db *gorm.DB
@@ -93,6 +107,9 @@ var (
 // Migrate creates/updates all identity tables for the resolved naming.
 func Migrate(db *gorm.DB, opts ...Option) error {
 	n := resolve(opts...)
+	if err := n.Validate(); err != nil {
+		return err
+	}
 	if n.Schema != "" {
 		if err := db.Exec("CREATE SCHEMA IF NOT EXISTS " + n.Schema).Error; err != nil {
 			return err
@@ -150,7 +167,7 @@ func (s *UserStore) Update(ctx context.Context, u *identity.User) error {
 }
 
 func (s *UserStore) Delete(ctx context.Context, u *identity.User) error {
-	return s.db.WithContext(ctx).Table(s.t.users).Where("id = ?", u.ID).Delete(&identity.User{}).Error
+	return s.t.deleteUserCascade(s.db.WithContext(ctx), u.ID)
 }
 
 func (s *UserStore) findUser(ctx context.Context, where string, arg any) (*identity.User, error) {
@@ -338,8 +355,25 @@ func (s *RoleStore) Create(ctx context.Context, r *identity.Role) error {
 }
 
 func (s *RoleStore) Update(ctx context.Context, r *identity.Role) error {
-	return s.db.WithContext(ctx).Table(s.t.roles).Where("id = ?", r.ID).
-		Select("name", "normalized_name", "concurrency_stamp").Updates(r).Error
+	old := r.ConcurrencyStamp
+	r.ConcurrencyStamp = identity.NewConcurrencyStamp()
+	res := s.db.WithContext(ctx).Table(s.t.roles).
+		Where("id = ? AND concurrency_stamp = ?", r.ID, old).
+		Select("name", "normalized_name", "concurrency_stamp").Updates(r)
+	if res.Error != nil {
+		r.ConcurrencyStamp = old
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		r.ConcurrencyStamp = old
+		var count int64
+		s.db.WithContext(ctx).Table(s.t.roles).Where("id = ?", r.ID).Count(&count)
+		if count == 0 {
+			return identity.ErrNotFound
+		}
+		return identity.ErrConcurrencyFailure
+	}
+	return nil
 }
 
 func (s *RoleStore) Delete(ctx context.Context, r *identity.Role) error {

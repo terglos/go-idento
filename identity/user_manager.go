@@ -181,6 +181,13 @@ func (m *UserManagerOf[T, PT]) ChangePassword(ctx context.Context, u PT, current
 	return m.Store.Update(ctx, u)
 }
 
+// Delete removes the user. Stores cascade-clean the user's roles, claims, logins
+// and tokens (FK ON DELETE CASCADE on Postgres; an explicit transaction in the
+// GORM and in-memory stores).
+func (m *UserManagerOf[T, PT]) Delete(ctx context.Context, u PT) error {
+	return m.Store.Delete(ctx, u)
+}
+
 func (m *UserManagerOf[T, PT]) FindByID(ctx context.Context, id string) (PT, error) {
 	return m.Store.FindByID(ctx, id)
 }

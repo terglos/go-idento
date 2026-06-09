@@ -118,6 +118,9 @@ type UserLoginInfo struct {
 // RoleStore abstracts role and role-claim persistence.
 type RoleStore interface {
 	Create(ctx context.Context, r *Role) error
+	// Update persists role changes under optimistic concurrency: it must match
+	// on the incoming ConcurrencyStamp, rotate it on success, and return
+	// ErrConcurrencyFailure on a stale write (or ErrNotFound if the row is gone).
 	Update(ctx context.Context, r *Role) error
 	Delete(ctx context.Context, r *Role) error
 

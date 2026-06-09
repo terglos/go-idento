@@ -115,6 +115,18 @@ func TestPgxIntegration(t *testing.T) {
 	if err != nil || total < 1 || len(page) < 1 {
 		t.Fatalf("list users: err=%v total=%d page=%d", err, total, len(page))
 	}
+
+	// Role optimistic concurrency against real Postgres.
+	r1, _ := rm.FindByName(ctx, "Admin")
+	r2, _ := rm.FindByName(ctx, "Admin")
+	r1.Name = "Administrators"
+	if err := rm.Update(ctx, r1); err != nil {
+		t.Fatalf("first role update should win: %v", err)
+	}
+	r2.Name = "Superusers"
+	if err := rm.Update(ctx, r2); err != identity.ErrConcurrencyFailure {
+		t.Fatalf("stale role update must fail with ErrConcurrencyFailure, got %v", err)
+	}
 }
 
 // TestPgxCustomSchemaAndPrefix verifies a fully custom physical layout (custom

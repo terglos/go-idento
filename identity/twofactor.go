@@ -3,6 +3,7 @@ package identity
 import (
 	"context"
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/base32"
 	"strings"
 )
@@ -82,7 +83,9 @@ func (m *UserManagerOf[T, PT]) RedeemRecoveryCode(ctx context.Context, u PT, cod
 	remaining := make([]string, 0, len(parts))
 	found := false
 	for _, p := range parts {
-		if p == target && !found {
+		// Constant-time compare so redemption time doesn't leak which stored
+		// code (if any) matched.
+		if !found && subtle.ConstantTimeCompare([]byte(p), []byte(target)) == 1 {
 			found = true
 			continue // consume it
 		}

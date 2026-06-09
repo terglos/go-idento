@@ -1,5 +1,27 @@
 package identity
 
+import "fmt"
+
+// identRe matches a safe, unquoted SQL identifier: a letter or underscore
+// followed by letters, digits or underscores. Stores interpolate table/schema
+// names into SQL (identifiers can't be bound as parameters), so every
+// configured name must pass this check to rule out injection.
+func isValidIdentifier(s string) bool {
+	if s == "" || len(s) > 63 { // 63 = Postgres NAMEDATALEN-1
+		return false
+	}
+	for i, r := range s {
+		switch {
+		case r == '_':
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z':
+		case r >= '0' && r <= '9' && i > 0:
+		default:
+			return false
+		}
+	}
+	return true
+}
+
 // TableNames holds the physical table name for each identity table. It is the
 // single source of truth a store uses to build its SQL, so every reference
 // (including joins) stays consistent. Start from [DefaultTableNames] and tweak,
@@ -52,6 +74,26 @@ type Naming struct {
 
 // DefaultNaming returns the canonical layout (no explicit schema).
 func DefaultNaming() Naming { return Naming{Tables: DefaultTableNames()} }
+
+// Validate checks that the schema (when set) and every table name are safe SQL
+// identifiers. Stores should call it before running migrations or building SQL,
+// since identifiers are interpolated rather than parameter-bound. It returns an
+// error wrapping [ErrInvalidIdentifier] naming the offending value.
+func (n Naming) Validate() error {
+	if n.Schema != "" && !isValidIdentifier(n.Schema) {
+		return fmt.Errorf("%w: schema %q", ErrInvalidIdentifier, n.Schema)
+	}
+	for label, name := range map[string]string{
+		"Users": n.Tables.Users, "Roles": n.Tables.Roles, "UserRoles": n.Tables.UserRoles,
+		"UserClaims": n.Tables.UserClaims, "RoleClaims": n.Tables.RoleClaims,
+		"UserLogins": n.Tables.UserLogins, "UserTokens": n.Tables.UserTokens,
+	} {
+		if !isValidIdentifier(name) {
+			return fmt.Errorf("%w: table %s=%q", ErrInvalidIdentifier, label, name)
+		}
+	}
+	return nil
+}
 
 // Qualify returns the table identifier as the store should reference it,
 // prefixing the schema when one is configured ("schema"."table" style is left

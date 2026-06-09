@@ -30,6 +30,9 @@ func NewUserStoreOf[T any, PT identity.Ptr[T]](db *gorm.DB, opts ...Option) *Gen
 // tables (roles, claims, tokens, logins), honoring schema/prefix options.
 func MigrateOf[T any](db *gorm.DB, opts ...Option) error {
 	n := resolve(opts...)
+	if err := n.Validate(); err != nil {
+		return err
+	}
 	if n.Schema != "" {
 		if err := db.Exec("CREATE SCHEMA IF NOT EXISTS " + n.Schema).Error; err != nil {
 			return err
@@ -82,7 +85,7 @@ func (s *GenericUserStore[T, PT]) Update(ctx context.Context, u PT) error {
 }
 
 func (s *GenericUserStore[T, PT]) Delete(ctx context.Context, u PT) error {
-	return s.db.WithContext(ctx).Table(s.t.users).Where("id = ?", u.Base().ID).Delete(u).Error
+	return s.t.deleteUserCascade(s.db.WithContext(ctx), u.Base().ID)
 }
 
 func (s *GenericUserStore[T, PT]) find(ctx context.Context, where string, arg any) (PT, error) {
