@@ -37,6 +37,9 @@ type UserRoleStore[T any, PT Ptr[T]] interface {
 	RemoveFromRole(ctx context.Context, u PT, normalizedRoleName string) error
 	GetRoles(ctx context.Context, u PT) ([]string, error)
 	IsInRole(ctx context.Context, u PT, normalizedRoleName string) (bool, error)
+	// GetUsersInRole returns every user that belongs to the role. An unknown
+	// role yields an empty slice (not an error).
+	GetUsersInRole(ctx context.Context, normalizedRoleName string) ([]PT, error)
 }
 
 // UserClaimStore handles a user's claims.
@@ -44,6 +47,8 @@ type UserClaimStore[T any, PT Ptr[T]] interface {
 	GetClaims(ctx context.Context, u PT) ([]Claim, error)
 	AddClaims(ctx context.Context, u PT, claims []Claim) error
 	RemoveClaims(ctx context.Context, u PT, claims []Claim) error
+	// GetUsersForClaim returns every user carrying the exact claim type/value.
+	GetUsersForClaim(ctx context.Context, claimType, claimValue string) ([]PT, error)
 }
 
 // UserTokenStore handles per-user tokens (refresh tokens, recovery codes, etc.).

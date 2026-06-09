@@ -252,6 +252,41 @@ func (s *UserStore) IsInRole(ctx context.Context, u *identity.User, normalizedRo
 	return count > 0, err
 }
 
+func (s *UserStore) GetUsersInRole(ctx context.Context, normalizedRoleName string) ([]*identity.User, error) {
+	var ids []string
+	sql := fmt.Sprintf(`SELECT ur.user_id FROM %s ur JOIN %s r ON r.id = ur.role_id WHERE r.normalized_name = ?`, s.t.userRoles, s.t.roles)
+	if err := s.db.WithContext(ctx).Raw(sql, normalizedRoleName).Scan(&ids).Error; err != nil {
+		return nil, err
+	}
+	return s.usersByIDs(ctx, ids)
+}
+
+func (s *UserStore) GetUsersForClaim(ctx context.Context, claimType, claimValue string) ([]*identity.User, error) {
+	var ids []string
+	sql := fmt.Sprintf(`SELECT user_id FROM %s WHERE claim_type = ? AND claim_value = ?`, s.t.userClaims)
+	if err := s.db.WithContext(ctx).Raw(sql, claimType, claimValue).Scan(&ids).Error; err != nil {
+		return nil, err
+	}
+	return s.usersByIDs(ctx, ids)
+}
+
+// usersByIDs loads full user rows (applying the Attributes serializer) for a set
+// of ids, ordered by id for determinism.
+func (s *UserStore) usersByIDs(ctx context.Context, ids []string) ([]*identity.User, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	var users []identity.User
+	if err := s.db.WithContext(ctx).Table(s.t.users).Where("id IN ?", ids).Order("id").Find(&users).Error; err != nil {
+		return nil, err
+	}
+	out := make([]*identity.User, len(users))
+	for i := range users {
+		out[i] = &users[i]
+	}
+	return out, nil
+}
+
 func (s *UserStore) GetClaims(ctx context.Context, u *identity.User) ([]identity.Claim, error) {
 	var rows []identity.UserClaim
 	if err := s.db.WithContext(ctx).Table(s.t.userClaims).Where("user_id = ?", u.ID).Find(&rows).Error; err != nil {

@@ -181,6 +181,30 @@ func (s *UserStore) GetRoles(ctx context.Context, u *identity.User) ([]string, e
 	return s.q.GetUserRoles(ctx, u.ID)
 }
 
+func (s *UserStore) GetUsersInRole(ctx context.Context, normalizedRoleName string) ([]*identity.User, error) {
+	rows, err := s.q.GetUsersInRole(ctx, normalizedRoleName)
+	if err != nil {
+		return nil, err
+	}
+	return usersFromRows(rows), nil
+}
+
+func (s *UserStore) GetUsersForClaim(ctx context.Context, claimType, claimValue string) ([]*identity.User, error) {
+	rows, err := s.q.GetUsersForClaim(ctx, gen.GetUsersForClaimParams{ClaimType: claimType, ClaimValue: claimValue})
+	if err != nil {
+		return nil, err
+	}
+	return usersFromRows(rows), nil
+}
+
+func usersFromRows(rows []gen.IdentityUser) []*identity.User {
+	out := make([]*identity.User, len(rows))
+	for i, r := range rows {
+		out[i] = toUser(r)
+	}
+	return out
+}
+
 func (s *UserStore) IsInRole(ctx context.Context, u *identity.User, normalizedRoleName string) (bool, error) {
 	return s.q.IsUserInRole(ctx, gen.IsUserInRoleParams{UserID: u.ID, NormalizedName: normalizedRoleName})
 }

@@ -65,6 +65,21 @@ SELECT EXISTS(
     WHERE ur.user_id=$1 AND r.normalized_name=$2
 );
 
+-- name: GetUsersInRole :many
+SELECT * FROM identity_users
+WHERE id IN (
+    SELECT user_id FROM identity_user_roles
+    WHERE role_id = (SELECT id FROM identity_roles WHERE normalized_name = $1)
+)
+ORDER BY id;
+
+-- name: GetUsersForClaim :many
+SELECT * FROM identity_users
+WHERE id IN (
+    SELECT user_id FROM identity_user_claims WHERE claim_type = $1 AND claim_value = $2
+)
+ORDER BY id;
+
 -- name: GetUserClaims :many
 SELECT claim_type, claim_value FROM identity_user_claims WHERE user_id=$1;
 

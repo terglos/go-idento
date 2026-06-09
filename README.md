@@ -10,7 +10,7 @@ management, password hashing, claims, lockout, two-factor and JWT, built on
 pluggable stores so the persistence layer can be swapped without touching
 business logic.
 
-> Status: beta (v0.2.x). User/role/sign-in managers, PBKDF2 hashing, JWT
+> Status: beta (v0.3.x). User/role/sign-in managers, PBKDF2 hashing, JWT
 > (HS256/RS256/ES256) + JWKS, TOTP/SMS two-factor with recovery codes, external
 > logins, email-confirmation/password-reset tokens, and policy authorization are
 > implemented and tested. Four stores ship: in-memory, GORM, raw `pgx`, and a
@@ -36,13 +36,16 @@ app and own your data. go-idento fills that gap with familiar building blocks â€
 | Area | API |
 |---|---|
 | Entities | `identity.User` / `identity.Role` / `identity.Claim` |
-| Users | `identity.UserManager` (create, password, roles, claims, lockout, 2FA) |
-| Roles | `identity.RoleManager` |
-| Sign-in | `identity.SignInManager` (password, 2FA, external) |
+| Users | `identity.UserManager` (create, password add/change/remove, email & phone change, roles, claims, lockout, 2FA) |
+| Roles | `identity.RoleManager` (CRUD + role claims, optimistic concurrency) |
+| Queries | users-by-role / users-by-claim, paged `ListUsers` |
+| Sign-in | `identity.SignInManager` (password, 2FA, external, remember-this-machine, security-stamp validation) |
+| Two-factor | TOTP + SMS + recovery codes, pluggable `TwoFactorTokenProvider` |
 | Tokens | `identity.TokenService` (JWT access + refresh, HS256/RS256/ES256) |
+| Delivery | `identity.SMSSender` / `identity.EmailSender` (provider-agnostic) |
 | Persistence | `identity.UserStore` / `identity.RoleStore` interfaces |
 | Password hashing | `identity.PasswordHasher` (PBKDF2, versioned format) |
-| Config | `identity.Options` |
+| Config | `identity.Options` (password / lockout / user / sign-in policy) |
 | HTTP | `auth.RequireAuth` / `auth.RequireRole` / `auth.RequirePolicy` |
 
 The default password hasher uses a **versioned PBKDF2 format**

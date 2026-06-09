@@ -71,3 +71,11 @@ func (m *RoleManager) AddClaim(ctx context.Context, r *Role, c Claim) error {
 func (m *RoleManager) RemoveClaim(ctx context.Context, r *Role, c Claim) error {
 	return m.Store.RemoveClaim(ctx, r, c)
 }
+
+// ReplaceClaim swaps an existing role claim for a new one (remove old, add new).
+func (m *RoleManager) ReplaceClaim(ctx context.Context, r *Role, old, replacement Claim) error {
+	if err := m.Store.RemoveClaim(ctx, r, old); err != nil {
+		return err
+	}
+	return m.Store.AddClaim(ctx, r, replacement)
+}

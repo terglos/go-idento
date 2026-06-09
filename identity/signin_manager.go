@@ -1,6 +1,14 @@
 package identity
 
-import "context"
+import (
+	"context"
+	"crypto/subtle"
+)
+
+// subtleConstEq compares two strings in constant time.
+func subtleConstEq(a, b string) bool {
+	return subtle.ConstantTimeCompare([]byte(a), []byte(b)) == 1
+}
 
 // SignInResult is the outcome of a sign-in attempt.
 type SignInResult struct {
@@ -51,6 +59,29 @@ func (s *SignInManagerOf[T, PT]) PasswordSignIn(ctx context.Context, userName, p
 		return SignInResult{}, nil // generic failure: do not reveal existence
 	}
 	return s.passwordSignInUser(ctx, u, password, lockoutOnFailure)
+}
+
+// PasswordSignInRemembering is like [PasswordSignIn] but, when the account has
+// two-factor enabled, a valid rememberToken (from a prior
+// [UserManagerOf.GenerateTwoFactorRememberToken] on this device) short-circuits
+// the second factor and the result Succeeds directly. An empty or invalid token
+// behaves exactly like PasswordSignIn (returns RequiresTwoFactor).
+func (s *SignInManagerOf[T, PT]) PasswordSignInRemembering(ctx context.Context, userName, password string, lockoutOnFailure bool, rememberToken string) (SignInResult, PT) {
+	u, err := s.Users.FindByName(ctx, userName)
+	if err != nil || u == nil {
+		return SignInResult{}, nil
+	}
+	res, user := s.passwordSignInUser(ctx, u, password, lockoutOnFailure)
+	if res.RequiresTwoFactor && s.IsTwoFactorClientRemembered(user, rememberToken) {
+		return SignInResult{Succeeded: true}, user
+	}
+	return res, user
+}
+
+// IsTwoFactorClientRemembered reports whether rememberToken is a valid
+// remember-this-machine token for the user (skips the second factor).
+func (s *SignInManagerOf[T, PT]) IsTwoFactorClientRemembered(u PT, rememberToken string) bool {
+	return s.Users.VerifyTwoFactorRememberToken(u, rememberToken)
 }
 
 func (s *SignInManagerOf[T, PT]) passwordSignInUser(ctx context.Context, u PT, password string, lockoutOnFailure bool) (SignInResult, PT) {
@@ -118,6 +149,39 @@ func (s *SignInManagerOf[T, PT]) TwoFactorPhoneSignIn(ctx context.Context, u PT,
 		return SignInResult{IsLockedOut: true}
 	}
 	return SignInResult{}
+}
+
+// ValidateSecurityStamp reloads the user by id and reports whether the supplied
+// stamp still matches — i.e. the session/cookie is current and no credential
+// change has revoked it. Returns the fresh user and true on a match; nil and
+// false otherwise. Use it to revalidate long-lived cookie sessions (the JWT path
+// already checks the stamp during token validation).
+func (s *SignInManagerOf[T, PT]) ValidateSecurityStamp(ctx context.Context, userID, stamp string) (PT, bool) {
+	u, err := s.Users.FindByID(ctx, userID)
+	if err != nil || u == nil {
+		return nil, false
+	}
+	if subtleConstEq(u.Base().SecurityStamp, stamp) {
+		return u, true
+	}
+	return nil, false
+}
+
+// RefreshSignIn re-evaluates an existing session: it reloads the user, checks
+// the security stamp is current and that the user may still sign in. On success
+// it returns Succeeded with the fresh user — useful before re-issuing tokens.
+func (s *SignInManagerOf[T, PT]) RefreshSignIn(ctx context.Context, userID, stamp string) (SignInResult, PT) {
+	u, ok := s.ValidateSecurityStamp(ctx, userID, stamp)
+	if !ok {
+		return SignInResult{}, nil
+	}
+	if s.Users.IsLockedOut(u) {
+		return SignInResult{IsLockedOut: true}, u
+	}
+	if !s.CanSignIn(u) {
+		return SignInResult{IsNotAllowed: true}, u
+	}
+	return SignInResult{Succeeded: true}, u
 }
 
 // TwoFactorRecoveryCodeSignIn completes 2FA using a one-time recovery code.

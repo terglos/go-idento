@@ -34,8 +34,14 @@ type UserManagerOf[T any, PT Ptr[T]] struct {
 	Tokens *DataTokenProvider
 	// SMS delivers phone two-factor codes; nil until set via WithSMSSender.
 	SMS SMSSender
+	// Email delivers confirmation/reset messages; nil until set via WithEmailSender.
+	Email EmailSender
 	// Logger surfaces non-fatal security-relevant failures; defaults to no-op.
 	Logger Logger
+	// tokenProviders holds custom named two-factor providers registered via
+	// RegisterTwoFactorProvider; the built-in Authenticator/Phone providers are
+	// resolved on demand and need no registration.
+	tokenProviders map[string]TwoFactorTokenProvider[T, PT]
 }
 
 // UserManager is the manager for the built-in [User] type.
@@ -79,8 +85,30 @@ func (m *UserManagerOf[T, PT]) CreateWithPassword(ctx context.Context, u PT, pas
 	return m.Store.Create(ctx, u)
 }
 
+// ValidateUserName enforces the configured UserOptions.AllowedUserNameCharacters
+// policy: the name must be non-empty and, when an allow-list is set, every rune
+// must be a member of it. An empty allow-list disables the character check.
+func (m *UserManagerOf[T, PT]) ValidateUserName(name string) error {
+	if strings.TrimSpace(name) == "" {
+		return ErrInvalidUserName
+	}
+	allowed := m.Options.User.AllowedUserNameCharacters
+	if allowed == "" {
+		return nil
+	}
+	for _, r := range name {
+		if !strings.ContainsRune(allowed, r) {
+			return ErrInvalidUserName
+		}
+	}
+	return nil
+}
+
 func (m *UserManagerOf[T, PT]) prepareForCreate(ctx context.Context, u PT) error {
 	b := u.Base()
+	if err := m.ValidateUserName(b.UserName); err != nil {
+		return err
+	}
 	if b.ID == "" {
 		b.ID = uuid.NewString()
 	}
@@ -136,6 +164,15 @@ func (m *UserManagerOf[T, PT]) ValidatePassword(pw string) error {
 	if o.RequireNonAlphanumeric && !hasNonAlpha {
 		return ErrPasswordRequiresNonAlpha
 	}
+	if o.RequiredUniqueChars > 1 {
+		seen := make(map[rune]struct{})
+		for _, r := range pw {
+			seen[r] = struct{}{}
+		}
+		if len(seen) < o.RequiredUniqueChars {
+			return ErrPasswordRequiresUnique
+		}
+	}
 	return nil
 }
 
@@ -178,6 +215,94 @@ func (m *UserManagerOf[T, PT]) ChangePassword(ctx context.Context, u PT, current
 	b := u.Base()
 	b.PasswordHash = m.Hasher.Hash(b, newPassword)
 	b.SecurityStamp = newStamp() // invalidate existing tokens/sessions
+	return m.Store.Update(ctx, u)
+}
+
+// SetUserName changes the user name (administrative path). It validates the
+// allowed-character policy, re-normalizes, rejects a name already taken by a
+// different user, and rotates the security stamp.
+func (m *UserManagerOf[T, PT]) SetUserName(ctx context.Context, u PT, userName string) error {
+	if err := m.ValidateUserName(userName); err != nil {
+		return err
+	}
+	normalized := m.Normalizer.Normalize(userName)
+	if existing, err := m.Store.FindByName(ctx, normalized); err == nil && existing != nil && existing.Base().ID != u.Base().ID {
+		return ErrDuplicateUserName
+	} else if err != nil && !errors.Is(err, ErrNotFound) {
+		return err
+	}
+	b := u.Base()
+	b.UserName = userName
+	b.NormalizedUserName = normalized
+	b.SecurityStamp = newStamp()
+	return m.Store.Update(ctx, u)
+}
+
+// SetEmail changes the email directly (administrative path, no confirmation
+// token). It re-normalizes, enforces RequireUniqueEmail against other users,
+// marks the email unconfirmed, and rotates the security stamp. For a
+// user-driven, token-verified change use [ChangeEmail].
+func (m *UserManagerOf[T, PT]) SetEmail(ctx context.Context, u PT, email string) error {
+	normalized := m.Normalizer.Normalize(email)
+	if m.Options.User.RequireUniqueEmail && normalized != "" {
+		if existing, err := m.Store.FindByEmail(ctx, normalized); err == nil && existing != nil && existing.Base().ID != u.Base().ID {
+			return ErrDuplicateEmail
+		} else if err != nil && !errors.Is(err, ErrNotFound) {
+			return err
+		}
+	}
+	b := u.Base()
+	b.Email = email
+	b.NormalizedEmail = normalized
+	b.EmailConfirmed = false
+	b.SecurityStamp = newStamp()
+	return m.Store.Update(ctx, u)
+}
+
+// GetSecurityStamp returns the user's current security stamp.
+func (m *UserManagerOf[T, PT]) GetSecurityStamp(u PT) string {
+	return u.Base().SecurityStamp
+}
+
+// UpdateSecurityStamp rotates the security stamp and persists it. Because the
+// stamp is embedded in issued JWTs and re-checked on validation, this revokes
+// every outstanding token for the user — i.e. "sign out everywhere". (To end a
+// single session use TokenService.Revoke or clear the auth cookie.)
+func (m *UserManagerOf[T, PT]) UpdateSecurityStamp(ctx context.Context, u PT) error {
+	u.Base().SecurityStamp = newStamp()
+	return m.Store.Update(ctx, u)
+}
+
+// HasPassword reports whether the user has a local password set (false for a
+// user created purely via external login).
+func (m *UserManagerOf[T, PT]) HasPassword(u PT) bool {
+	return u.Base().PasswordHash != ""
+}
+
+// AddPassword sets a local password on a user that has none (e.g. one created
+// through an external login). It fails with [ErrPasswordAlreadySet] if a
+// password is already present — use [ChangePassword] for that. The security
+// stamp is rotated so any outstanding tokens are invalidated.
+func (m *UserManagerOf[T, PT]) AddPassword(ctx context.Context, u PT, password string) error {
+	if m.HasPassword(u) {
+		return ErrPasswordAlreadySet
+	}
+	if err := m.ValidatePassword(password); err != nil {
+		return err
+	}
+	b := u.Base()
+	b.PasswordHash = m.Hasher.Hash(b, password)
+	b.SecurityStamp = newStamp()
+	return m.Store.Update(ctx, u)
+}
+
+// RemovePassword clears the user's local password (e.g. to force external-login
+// only). The security stamp is rotated. It is a no-op-safe call: removing an
+// already-absent password still rotates the stamp and persists.
+func (m *UserManagerOf[T, PT]) RemovePassword(ctx context.Context, u PT) error {
+	b := u.Base()
+	b.PasswordHash = ""
+	b.SecurityStamp = newStamp()
 	return m.Store.Update(ctx, u)
 }
 
@@ -229,6 +354,11 @@ func (m *UserManagerOf[T, PT]) IsInRole(ctx context.Context, u PT, role string) 
 	return m.Store.IsInRole(ctx, u, m.Normalizer.Normalize(role))
 }
 
+// GetUsersInRole returns every user that belongs to the named role.
+func (m *UserManagerOf[T, PT]) GetUsersInRole(ctx context.Context, role string) ([]PT, error) {
+	return m.Store.GetUsersInRole(ctx, m.Normalizer.Normalize(role))
+}
+
 // --- Claims ---
 
 func (m *UserManagerOf[T, PT]) GetClaims(ctx context.Context, u PT) ([]Claim, error) {
@@ -241,6 +371,19 @@ func (m *UserManagerOf[T, PT]) AddClaims(ctx context.Context, u PT, claims ...Cl
 
 func (m *UserManagerOf[T, PT]) RemoveClaims(ctx context.Context, u PT, claims ...Claim) error {
 	return m.Store.RemoveClaims(ctx, u, claims)
+}
+
+// GetUsersForClaim returns every user carrying the exact claim type/value.
+func (m *UserManagerOf[T, PT]) GetUsersForClaim(ctx context.Context, claimType, claimValue string) ([]PT, error) {
+	return m.Store.GetUsersForClaim(ctx, claimType, claimValue)
+}
+
+// ReplaceClaim swaps an existing claim for a new one (remove old, add new).
+func (m *UserManagerOf[T, PT]) ReplaceClaim(ctx context.Context, u PT, old, replacement Claim) error {
+	if err := m.Store.RemoveClaims(ctx, u, []Claim{old}); err != nil {
+		return err
+	}
+	return m.Store.AddClaims(ctx, u, []Claim{replacement})
 }
 
 // --- Lockout ---

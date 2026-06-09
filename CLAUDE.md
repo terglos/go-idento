@@ -30,7 +30,9 @@ identity/              core (no DB dependency)
   token_provider.go    DataTokenProvider: email-confirm / password-reset tokens
   totp.go              RFC 6238 TOTP + otpauth URI
   twofactor.go         authenticator key + one-time recovery codes (on UserManagerOf)
-  phone.go             SMS two-factor (SMSSender, phone token generate/verify)
+  twofactor_providers.go pluggable TwoFactorTokenProvider + GenerateUserToken/VerifyUserToken/GetValidTwoFactorProviders
+  phone.go             SMS two-factor (SMSSender) + phone change flow (token bound to new number)
+  email.go             EmailSender + SendEmailConfirmation/SendPasswordReset helpers
   external_login.go    OAuth/OIDC login association + ExternalLoginSignIn
   hasher.go            PBKDF2 password hasher — versioned wire format (0x01 marker)
   options.go           IdentityOptions (password/lockout/user/signin policy)

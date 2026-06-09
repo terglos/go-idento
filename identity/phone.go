@@ -22,7 +22,10 @@ type SMSSenderFunc func(ctx context.Context, phoneNumber, message string) error
 
 func (f SMSSenderFunc) Send(ctx context.Context, phone, msg string) error { return f(ctx, phone, msg) }
 
-const phoneTokenName = "PhoneToken"
+const (
+	phoneTokenName       = "PhoneToken"
+	changePhoneTokenName = "ChangePhoneToken"
+)
 
 // PhoneTokenTTL is how long an issued SMS code stays valid.
 var PhoneTokenTTL = 5 * time.Minute
@@ -98,6 +101,85 @@ func (m *UserManagerOf[T, PT]) ConfirmPhoneNumber(ctx context.Context, u PT, cod
 	b := u.Base()
 	b.PhoneNumberConfirmed = true
 	return m.Store.Update(ctx, u)
+}
+
+// GetPhoneNumberConfirmed reports whether the user's phone number is confirmed.
+func (m *UserManagerOf[T, PT]) GetPhoneNumberConfirmed(u PT) bool {
+	return u.Base().PhoneNumberConfirmed
+}
+
+// SetPhoneNumber sets the phone number directly (administrative path, no SMS
+// challenge). The number is marked unconfirmed and the security stamp rotated.
+func (m *UserManagerOf[T, PT]) SetPhoneNumber(ctx context.Context, u PT, phone string) error {
+	b := u.Base()
+	b.PhoneNumber = phone
+	b.PhoneNumberConfirmed = false
+	b.SecurityStamp = newStamp()
+	return m.Store.Update(ctx, u)
+}
+
+// GenerateChangePhoneNumberToken issues a 6-digit code bound to newPhone, so the
+// code can only confirm a change to that exact number. The plaintext code is
+// returned for the caller to deliver (e.g. via SMS to newPhone).
+func (m *UserManagerOf[T, PT]) GenerateChangePhoneNumberToken(ctx context.Context, u PT, newPhone string) (string, error) {
+	code := randomDigits(6)
+	exp := nowFn().Add(PhoneTokenTTL).Unix()
+	value := hashRefresh(code+"|"+newPhone) + ":" + strconv.FormatInt(exp, 10)
+	if err := m.Store.SetToken(ctx, u, internalProvider, changePhoneTokenName, value); err != nil {
+		return "", err
+	}
+	return code, nil
+}
+
+// SendChangePhoneNumberToken generates a change-phone code and delivers it to
+// newPhone via the configured SMSSender.
+func (m *UserManagerOf[T, PT]) SendChangePhoneNumberToken(ctx context.Context, u PT, newPhone string) error {
+	if m.SMS == nil {
+		return newErr("NoSMSSender", "no SMS sender configured")
+	}
+	if newPhone == "" {
+		return newErr("NoPhoneNumber", "new phone number is empty")
+	}
+	code, err := m.GenerateChangePhoneNumberToken(ctx, u, newPhone)
+	if err != nil {
+		return err
+	}
+	return m.SMS.Send(ctx, newPhone, fmt.Sprintf("Your verification code is %s", code))
+}
+
+// ChangePhoneNumber validates a code previously issued for newPhone (see
+// [GenerateChangePhoneNumberToken]) and, on success, sets the number, marks it
+// confirmed, rotates the security stamp and consumes the token. The token only
+// matches the exact number it was issued for.
+func (m *UserManagerOf[T, PT]) ChangePhoneNumber(ctx context.Context, u PT, newPhone, code string) error {
+	stored, err := m.Store.GetToken(ctx, u, internalProvider, changePhoneTokenName)
+	if err != nil {
+		return err
+	}
+	if stored == "" {
+		return ErrInvalidToken
+	}
+	hashPart, expPart, ok := strings.Cut(stored, ":")
+	if !ok {
+		return ErrInvalidToken
+	}
+	exp, err := strconv.ParseInt(expPart, 10, 64)
+	if err != nil || nowFn().After(time.Unix(exp, 0)) {
+		return ErrInvalidToken
+	}
+	want := hashRefresh(strings.TrimSpace(code) + "|" + newPhone)
+	if subtle.ConstantTimeCompare([]byte(hashPart), []byte(want)) != 1 {
+		return ErrInvalidToken
+	}
+	b := u.Base()
+	b.PhoneNumber = newPhone
+	b.PhoneNumberConfirmed = true
+	b.SecurityStamp = newStamp()
+	if err := m.Store.Update(ctx, u); err != nil {
+		return err
+	}
+	_ = m.Store.RemoveToken(ctx, u, internalProvider, changePhoneTokenName)
+	return nil
 }
 
 func randomDigits(n int) string {

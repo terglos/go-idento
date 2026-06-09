@@ -96,6 +96,7 @@ type queries struct {
 	findUserByID, findUserByName, findUserByEmail  string
 	countUsers, listUsers                          string
 	addToRole, removeFromRole, getRoles, isInRole  string
+	usersInRole, usersForClaim                     string
 	getUserClaims, addUserClaim, removeUserClaim   string
 	getToken, setToken, removeToken                string
 	addLogin, removeLogin, getLogins, findByLogin  string
@@ -132,6 +133,8 @@ func buildQueries(n identity.Naming) queries {
 		removeFromRole:  fmt.Sprintf(`DELETE FROM %s WHERE user_id=$1 AND role_id=(SELECT id FROM %s WHERE normalized_name=$2)`, UR, R),
 		getRoles:        fmt.Sprintf(`SELECT r.name FROM %s r JOIN %s ur ON ur.role_id=r.id WHERE ur.user_id=$1`, R, UR),
 		isInRole:        fmt.Sprintf(`SELECT EXISTS(SELECT 1 FROM %s ur JOIN %s r ON r.id=ur.role_id WHERE ur.user_id=$1 AND r.normalized_name=$2)`, UR, R),
+		usersInRole:     fmt.Sprintf(`SELECT %s FROM %s WHERE id IN (SELECT user_id FROM %s WHERE role_id=(SELECT id FROM %s WHERE normalized_name=$1)) ORDER BY id`, userCols, U, UR, R),
+		usersForClaim:   fmt.Sprintf(`SELECT %s FROM %s WHERE id IN (SELECT user_id FROM %s WHERE claim_type=$1 AND claim_value=$2) ORDER BY id`, userCols, U, UC),
 		getUserClaims:   fmt.Sprintf(`SELECT claim_type, claim_value FROM %s WHERE user_id=$1`, UC),
 		addUserClaim:    fmt.Sprintf(`INSERT INTO %s (user_id, claim_type, claim_value) VALUES ($1,$2,$3)`, UC),
 		removeUserClaim: fmt.Sprintf(`DELETE FROM %s WHERE user_id=$1 AND claim_type=$2 AND claim_value=$3`, UC),
@@ -291,6 +294,35 @@ func (s *UserStore) IsInRole(ctx context.Context, u *identity.User, normalizedRo
 	var exists bool
 	err := s.db.QueryRow(ctx, s.q.isInRole, u.ID, normalizedRoleName).Scan(&exists)
 	return exists, err
+}
+
+func (s *UserStore) scanUsers(rows pgx.Rows) ([]*identity.User, error) {
+	defer rows.Close()
+	var out []*identity.User
+	for rows.Next() {
+		u, err := scanUser(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, u)
+	}
+	return out, rows.Err()
+}
+
+func (s *UserStore) GetUsersInRole(ctx context.Context, normalizedRoleName string) ([]*identity.User, error) {
+	rows, err := s.db.Query(ctx, s.q.usersInRole, normalizedRoleName)
+	if err != nil {
+		return nil, err
+	}
+	return s.scanUsers(rows)
+}
+
+func (s *UserStore) GetUsersForClaim(ctx context.Context, claimType, claimValue string) ([]*identity.User, error) {
+	rows, err := s.db.Query(ctx, s.q.usersForClaim, claimType, claimValue)
+	if err != nil {
+		return nil, err
+	}
+	return s.scanUsers(rows)
 }
 
 func (s *UserStore) GetClaims(ctx context.Context, u *identity.User) ([]identity.Claim, error) {

@@ -222,6 +222,43 @@ func (s *userStore) IsInRole(_ context.Context, u *identity.User, normalizedRole
 	return s.userRoles[u.ID][rid], nil
 }
 
+func (s *userStore) GetUsersInRole(_ context.Context, normalizedRoleName string) ([]*identity.User, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	rid, ok := s.roleIDByName(normalizedRoleName)
+	if !ok {
+		return nil, nil
+	}
+	var out []*identity.User
+	for uid, set := range s.userRoles {
+		if set[rid] {
+			if u, ok := s.users[uid]; ok {
+				out = append(out, clone(u))
+			}
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out, nil
+}
+
+func (s *userStore) GetUsersForClaim(_ context.Context, claimType, claimValue string) ([]*identity.User, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var out []*identity.User
+	for uid, claims := range s.userClaims {
+		for _, c := range claims {
+			if c.Type == claimType && c.Value == claimValue {
+				if u, ok := s.users[uid]; ok {
+					out = append(out, clone(u))
+				}
+				break
+			}
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out, nil
+}
+
 func (s *userStore) GetClaims(_ context.Context, u *identity.User) ([]identity.Claim, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

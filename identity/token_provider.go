@@ -46,14 +46,23 @@ func (p *DataTokenProvider) Generate(purpose string, u *User) string {
 	return base64.RawURLEncoding.EncodeToString(out)
 }
 
-// Validate checks a token for (user, purpose) and that it is unexpired.
+// Validate checks a token for (user, purpose) and that it is unexpired (within
+// the provider's configured lifespan).
 func (p *DataTokenProvider) Validate(purpose, token string, u *User) bool {
+	return p.ValidateWithLifespan(purpose, token, u, p.lifespan)
+}
+
+// ValidateWithLifespan is like [Validate] but checks against an explicit
+// lifespan instead of the provider default — used for longer-lived tokens such
+// as the "remember this machine" two-factor token. Generation is unchanged
+// ([Generate] stamps the issue time); only the accepted age differs.
+func (p *DataTokenProvider) ValidateWithLifespan(purpose, token string, u *User, lifespan time.Duration) bool {
 	raw, err := base64.RawURLEncoding.DecodeString(token)
 	if err != nil || len(raw) != 8+sha256.Size {
 		return false
 	}
 	issued := int64(binary.BigEndian.Uint64(raw[:8]))
-	if nowFn().Sub(time.Unix(issued, 0)) > p.lifespan {
+	if nowFn().Sub(time.Unix(issued, 0)) > lifespan {
 		return false
 	}
 	// Rebuild the payload from a fresh buffer; appending onto raw[:8] would
@@ -76,7 +85,25 @@ const (
 	purposeEmailConfirmation = "EmailConfirmation"
 	purposePasswordReset     = "ResetPassword"
 	purposeChangeEmail       = "ChangeEmail"
+	purposeTwoFactorRemember = "TwoFactorRemember"
 )
+
+// TwoFactorRememberTTL is how long a "remember this machine" token stays valid.
+var TwoFactorRememberTTL = 30 * 24 * time.Hour
+
+// GenerateTwoFactorRememberToken issues a long-lived token a client can store to
+// skip the second factor on this device (see [SignInManagerOf.PasswordSignInRemembering]).
+// It binds the SecurityStamp, so a password or 2FA change invalidates it.
+func (m *UserManagerOf[T, PT]) GenerateTwoFactorRememberToken(u PT) string {
+	return m.Tokens.Generate(purposeTwoFactorRemember, u.Base())
+}
+
+// VerifyTwoFactorRememberToken reports whether token is a valid, unexpired
+// remember-this-machine token for the user.
+func (m *UserManagerOf[T, PT]) VerifyTwoFactorRememberToken(u PT, token string) bool {
+	return m.Tokens != nil && token != "" &&
+		m.Tokens.ValidateWithLifespan(purposeTwoFactorRemember, token, u.Base(), TwoFactorRememberTTL)
+}
 
 // --- UserManager integration ---
 

@@ -116,6 +116,20 @@ func TestPgxIntegration(t *testing.T) {
 		t.Fatalf("list users: err=%v total=%d page=%d", err, total, len(page))
 	}
 
+	// Reverse queries against real Postgres: users by role and by claim.
+	if err := um.AddClaims(ctx, signed, identity.Claim{Type: "tenant", Value: "acme"}); err != nil {
+		t.Fatalf("add claim: %v", err)
+	}
+	if us, err := um.GetUsersInRole(ctx, "Admin"); err != nil || len(us) != 1 || us[0].ID != signed.ID {
+		t.Fatalf("GetUsersInRole: err=%v n=%d", err, len(us))
+	}
+	if us, err := um.GetUsersForClaim(ctx, "tenant", "acme"); err != nil || len(us) != 1 || us[0].ID != signed.ID {
+		t.Fatalf("GetUsersForClaim: err=%v n=%d", err, len(us))
+	}
+	if us, _ := um.GetUsersForClaim(ctx, "tenant", "nope"); len(us) != 0 {
+		t.Fatalf("non-matching claim should be empty, got %d", len(us))
+	}
+
 	// Role optimistic concurrency against real Postgres.
 	r1, _ := rm.FindByName(ctx, "Admin")
 	r2, _ := rm.FindByName(ctx, "Admin")

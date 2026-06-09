@@ -175,6 +175,39 @@ func (s *GenericUserStore[T, PT]) IsInRole(ctx context.Context, u PT, normalized
 	return count > 0, err
 }
 
+func (s *GenericUserStore[T, PT]) GetUsersInRole(ctx context.Context, normalizedRoleName string) ([]PT, error) {
+	var ids []string
+	sql := fmt.Sprintf(`SELECT ur.user_id FROM %s ur JOIN %s r ON r.id = ur.role_id WHERE r.normalized_name = ?`, s.t.userRoles, s.t.roles)
+	if err := s.db.WithContext(ctx).Raw(sql, normalizedRoleName).Scan(&ids).Error; err != nil {
+		return nil, err
+	}
+	return s.usersByIDs(ctx, ids)
+}
+
+func (s *GenericUserStore[T, PT]) GetUsersForClaim(ctx context.Context, claimType, claimValue string) ([]PT, error) {
+	var ids []string
+	sql := fmt.Sprintf(`SELECT user_id FROM %s WHERE claim_type = ? AND claim_value = ?`, s.t.userClaims)
+	if err := s.db.WithContext(ctx).Raw(sql, claimType, claimValue).Scan(&ids).Error; err != nil {
+		return nil, err
+	}
+	return s.usersByIDs(ctx, ids)
+}
+
+func (s *GenericUserStore[T, PT]) usersByIDs(ctx context.Context, ids []string) ([]PT, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	var rows []T
+	if err := s.db.WithContext(ctx).Table(s.t.users).Where("id IN ?", ids).Order("id").Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	out := make([]PT, len(rows))
+	for i := range rows {
+		out[i] = PT(&rows[i])
+	}
+	return out, nil
+}
+
 func (s *GenericUserStore[T, PT]) GetClaims(ctx context.Context, u PT) ([]identity.Claim, error) {
 	var rows []identity.UserClaim
 	if err := s.db.WithContext(ctx).Table(s.t.userClaims).Where("user_id = ?", u.Base().ID).Find(&rows).Error; err != nil {

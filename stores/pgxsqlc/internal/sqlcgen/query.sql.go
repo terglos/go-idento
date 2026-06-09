@@ -510,6 +510,106 @@ func (q *Queries) GetUserToken(ctx context.Context, arg GetUserTokenParams) (str
 	return value, err
 }
 
+const getUsersForClaim = `-- name: GetUsersForClaim :many
+SELECT id, user_name, normalized_user_name, email, normalized_email, email_confirmed, password_hash, security_stamp, concurrency_stamp, phone_number, phone_number_confirmed, two_factor_enabled, lockout_end, lockout_enabled, access_failed_count, attributes, created_at, updated_at FROM identity_users
+WHERE id IN (
+    SELECT user_id FROM identity_user_claims WHERE claim_type = $1 AND claim_value = $2
+)
+ORDER BY id
+`
+
+type GetUsersForClaimParams struct {
+	ClaimType  string
+	ClaimValue string
+}
+
+func (q *Queries) GetUsersForClaim(ctx context.Context, arg GetUsersForClaimParams) ([]IdentityUser, error) {
+	rows, err := q.db.Query(ctx, getUsersForClaim, arg.ClaimType, arg.ClaimValue)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []IdentityUser
+	for rows.Next() {
+		var i IdentityUser
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserName,
+			&i.NormalizedUserName,
+			&i.Email,
+			&i.NormalizedEmail,
+			&i.EmailConfirmed,
+			&i.PasswordHash,
+			&i.SecurityStamp,
+			&i.ConcurrencyStamp,
+			&i.PhoneNumber,
+			&i.PhoneNumberConfirmed,
+			&i.TwoFactorEnabled,
+			&i.LockoutEnd,
+			&i.LockoutEnabled,
+			&i.AccessFailedCount,
+			&i.Attributes,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getUsersInRole = `-- name: GetUsersInRole :many
+SELECT id, user_name, normalized_user_name, email, normalized_email, email_confirmed, password_hash, security_stamp, concurrency_stamp, phone_number, phone_number_confirmed, two_factor_enabled, lockout_end, lockout_enabled, access_failed_count, attributes, created_at, updated_at FROM identity_users
+WHERE id IN (
+    SELECT user_id FROM identity_user_roles
+    WHERE role_id = (SELECT id FROM identity_roles WHERE normalized_name = $1)
+)
+ORDER BY id
+`
+
+func (q *Queries) GetUsersInRole(ctx context.Context, normalizedName string) ([]IdentityUser, error) {
+	rows, err := q.db.Query(ctx, getUsersInRole, normalizedName)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []IdentityUser
+	for rows.Next() {
+		var i IdentityUser
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserName,
+			&i.NormalizedUserName,
+			&i.Email,
+			&i.NormalizedEmail,
+			&i.EmailConfirmed,
+			&i.PasswordHash,
+			&i.SecurityStamp,
+			&i.ConcurrencyStamp,
+			&i.PhoneNumber,
+			&i.PhoneNumberConfirmed,
+			&i.TwoFactorEnabled,
+			&i.LockoutEnd,
+			&i.LockoutEnabled,
+			&i.AccessFailedCount,
+			&i.Attributes,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const isUserInRole = `-- name: IsUserInRole :one
 SELECT EXISTS(
     SELECT 1 FROM identity_user_roles ur

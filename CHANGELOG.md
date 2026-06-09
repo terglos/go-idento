@@ -4,6 +4,46 @@ Notable changes per release. Versions follow [SemVer](https://semver.org). This
 is a multi-module repo; all modules (`.`, `stores/gormstore`, `stores/pgxstore`,
 `stores/pgxsqlc`) share the same version tag.
 
+## v0.3.0
+
+Feature parity pass against the reference identity framework (ASP.NET Core
+Identity): management queries, account lifecycle, and pluggable two-factor.
+
+### Added
+- **Reverse queries**: `UserManager.GetUsersInRole` and `GetUsersForClaim`
+  (backed by new `UserRoleStore`/`UserClaimStore` methods, implemented in all
+  four stores).
+- **Password lifecycle**: `AddPassword`, `RemovePassword`, `HasPassword` for the
+  external-login → local-password flow.
+- **Account setters**: `SetUserName`, `SetEmail` (admin path) and a full phone
+  change flow — `SetPhoneNumber`, `GenerateChangePhoneNumberToken` /
+  `SendChangePhoneNumberToken`, `ChangePhoneNumber`, `GetPhoneNumberConfirmed`
+  (the change token is bound to the new number).
+- **Sessions**: `SignInManager.ValidateSecurityStamp` / `RefreshSignIn`,
+  `UserManager.UpdateSecurityStamp` (sign-out-everywhere) and `GetSecurityStamp`.
+- **Remember this machine**: `GenerateTwoFactorRememberToken` /
+  `VerifyTwoFactorRememberToken` and `SignInManager.PasswordSignInRemembering` /
+  `IsTwoFactorClientRemembered` (stamp-bound, long-lived).
+- **Pluggable two-factor**: `TwoFactorTokenProvider` interface +
+  `RegisterTwoFactorProvider`, `GenerateUserToken`, `VerifyUserToken`,
+  `GetValidTwoFactorProviders` (built-in Authenticator/Phone providers).
+- **Claims**: `ReplaceClaim` on both `UserManager` and `RoleManager`.
+- **Email delivery**: `EmailSender` interface (+ `EmailSenderFunc`),
+  `WithEmailSender`, and `SendEmailConfirmation` / `SendPasswordReset` helpers,
+  symmetric to `SMSSender`.
+
+### Fixed
+- **`UserOptions.AllowedUserNameCharacters` is now enforced** on user creation
+  and `SetUserName` (previously configured but ignored). New `ErrInvalidUserName`;
+  `ValidateUserName` is exported.
+- **`PasswordOptions.RequiredUniqueChars` is now enforced** in `ValidatePassword`
+  (previously a no-op). New `ErrPasswordRequiresUniqueChars`.
+
+### Notes
+- **Backward compatible** for callers of the built-in managers. Custom
+  `UserStore` implementers must add `GetUsersInRole` / `GetUsersForClaim` (the
+  compile-time interface assertions flag any gap).
+
 ## v0.2.1
 
 ### Added
