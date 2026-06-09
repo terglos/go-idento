@@ -22,6 +22,18 @@ WHERE id = @id AND concurrency_stamp = @old_concurrency_stamp;
 -- name: DeleteUser :exec
 DELETE FROM identity_users WHERE id=$1;
 
+-- name: CountUsers :one
+SELECT count(*) FROM identity_users
+WHERE @search::text = '' OR normalized_user_name LIKE '%' || @search || '%'
+   OR normalized_email LIKE '%' || @search || '%';
+
+-- name: ListUsers :many
+SELECT * FROM identity_users
+WHERE @search::text = '' OR normalized_user_name LIKE '%' || @search || '%'
+   OR normalized_email LIKE '%' || @search || '%'
+ORDER BY id
+LIMIT @lim OFFSET @off;
+
 -- name: GetUserByID :one
 SELECT * FROM identity_users WHERE id=$1;
 

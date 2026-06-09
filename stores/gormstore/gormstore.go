@@ -6,6 +6,7 @@ package gormstore
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"github.com/terglos/go-idento/identity"
 	"gorm.io/gorm"
@@ -22,8 +23,9 @@ func NewRoleStore(db *gorm.DB) *RoleStore { return &RoleStore{db: db} }
 
 // Compile-time interface conformance.
 var (
-	_ identity.DefaultUserStore = (*UserStore)(nil)
-	_ identity.RoleStore        = (*RoleStore)(nil)
+	_ identity.DefaultUserStore                          = (*UserStore)(nil)
+	_ identity.RoleStore                                 = (*RoleStore)(nil)
+	_ identity.UserLister[identity.User, *identity.User] = (*UserStore)(nil)
 )
 
 // Migrate creates/updates all identity tables.
@@ -94,6 +96,27 @@ func (s *UserStore) FindByEmail(ctx context.Context, normalizedEmail string) (*i
 		return nil, mapNotFound(err)
 	}
 	return &u, nil
+}
+
+// ListUsers implements identity.UserLister.
+func (s *UserStore) ListUsers(ctx context.Context, f identity.ListFilter) ([]*identity.User, int64, error) {
+	filtered := func() *gorm.DB {
+		q := s.db.WithContext(ctx).Model(&identity.User{})
+		if f.Search != "" {
+			like := "%" + strings.ToUpper(f.Search) + "%"
+			q = q.Where("normalized_user_name LIKE ? OR normalized_email LIKE ?", like, like)
+		}
+		return q
+	}
+	var total int64
+	if err := filtered().Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	var users []*identity.User
+	if err := filtered().Order("id").Limit(f.Limit).Offset(f.Offset).Find(&users).Error; err != nil {
+		return nil, 0, err
+	}
+	return users, total, nil
 }
 
 func (s *UserStore) roleIDByName(ctx context.Context, normalizedRoleName string) (string, error) {

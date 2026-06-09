@@ -109,4 +109,10 @@ func TestPgxIntegration(t *testing.T) {
 	if err := um.Store.Update(ctx, b); err != identity.ErrConcurrencyFailure {
 		t.Fatalf("stale update must fail with ErrConcurrencyFailure, got %v", err)
 	}
+
+	// Paged listing against real Postgres.
+	page, total, err := um.ListUsers(ctx, identity.ListFilter{Limit: 10})
+	if err != nil || total < 1 || len(page) < 1 {
+		t.Fatalf("list users: err=%v total=%d page=%d", err, total, len(page))
+	}
 }

@@ -77,6 +77,19 @@ func (q *Queries) AddUserToRole(ctx context.Context, arg AddUserToRoleParams) er
 	return err
 }
 
+const countUsers = `-- name: CountUsers :one
+SELECT count(*) FROM identity_users
+WHERE $1::text = '' OR normalized_user_name LIKE '%' || $1 || '%'
+   OR normalized_email LIKE '%' || $1 || '%'
+`
+
+func (q *Queries) CountUsers(ctx context.Context, search string) (int64, error) {
+	row := q.db.QueryRow(ctx, countUsers, search)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createRole = `-- name: CreateRole :exec
 INSERT INTO identity_roles (id, name, normalized_name, concurrency_stamp)
 VALUES ($1,$2,$3,$4)
@@ -514,6 +527,59 @@ func (q *Queries) IsUserInRole(ctx context.Context, arg IsUserInRoleParams) (boo
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
+}
+
+const listUsers = `-- name: ListUsers :many
+SELECT id, user_name, normalized_user_name, email, normalized_email, email_confirmed, password_hash, security_stamp, concurrency_stamp, phone_number, phone_number_confirmed, two_factor_enabled, lockout_end, lockout_enabled, access_failed_count, attributes, created_at, updated_at FROM identity_users
+WHERE $1::text = '' OR normalized_user_name LIKE '%' || $1 || '%'
+   OR normalized_email LIKE '%' || $1 || '%'
+ORDER BY id
+LIMIT $3 OFFSET $2
+`
+
+type ListUsersParams struct {
+	Search string
+	Off    int32
+	Lim    int32
+}
+
+func (q *Queries) ListUsers(ctx context.Context, arg ListUsersParams) ([]IdentityUser, error) {
+	rows, err := q.db.Query(ctx, listUsers, arg.Search, arg.Off, arg.Lim)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []IdentityUser
+	for rows.Next() {
+		var i IdentityUser
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserName,
+			&i.NormalizedUserName,
+			&i.Email,
+			&i.NormalizedEmail,
+			&i.EmailConfirmed,
+			&i.PasswordHash,
+			&i.SecurityStamp,
+			&i.ConcurrencyStamp,
+			&i.PhoneNumber,
+			&i.PhoneNumberConfirmed,
+			&i.TwoFactorEnabled,
+			&i.LockoutEnd,
+			&i.LockoutEnabled,
+			&i.AccessFailedCount,
+			&i.Attributes,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const removeUserFromRole = `-- name: RemoveUserFromRole :exec

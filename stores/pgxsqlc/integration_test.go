@@ -92,4 +92,19 @@ func TestSqlcIntegration(t *testing.T) {
 	if r, f := sm.ExternalLoginSignIn(ctx, "GitHub", "gh-1"); !r.Succeeded || f == nil {
 		t.Fatalf("external login failed: %+v", r)
 	}
+
+	// Optimistic concurrency + paged listing via the sqlc store.
+	a, _ := um.FindByID(ctx, signed.ID)
+	b, _ := um.FindByID(ctx, signed.ID)
+	a.SetAttribute("k", "1")
+	if err := um.Store.Update(ctx, a); err != nil {
+		t.Fatalf("first update should win: %v", err)
+	}
+	b.SetAttribute("k", "2")
+	if err := um.Store.Update(ctx, b); err != identity.ErrConcurrencyFailure {
+		t.Fatalf("stale update must fail with ErrConcurrencyFailure, got %v", err)
+	}
+	if page, total, err := um.ListUsers(ctx, identity.ListFilter{Search: "sqlc"}); err != nil || total < 1 || len(page) < 1 {
+		t.Fatalf("list users: err=%v total=%d page=%d", err, total, len(page))
+	}
 }

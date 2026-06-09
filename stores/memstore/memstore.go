@@ -5,6 +5,8 @@ package memstore
 
 import (
 	"context"
+	"sort"
+	"strings"
 	"sync"
 
 	"github.com/terglos/go-idento/identity"
@@ -48,8 +50,9 @@ type userStore Store
 type roleStore Store
 
 var (
-	_ identity.DefaultUserStore = (*userStore)(nil)
-	_ identity.RoleStore        = (*roleStore)(nil)
+	_ identity.DefaultUserStore                          = (*userStore)(nil)
+	_ identity.RoleStore                                 = (*roleStore)(nil)
+	_ identity.UserLister[identity.User, *identity.User] = (*userStore)(nil)
 )
 
 func tokenKey(userID, provider, name string) string { return userID + "|" + provider + "|" + name }
@@ -114,6 +117,35 @@ func (s *userStore) findBy(pred func(*identity.User) bool) (*identity.User, erro
 
 func (s *userStore) FindByName(_ context.Context, n string) (*identity.User, error) {
 	return s.findBy(func(u *identity.User) bool { return u.NormalizedUserName == n })
+}
+
+// ListUsers implements identity.UserLister.
+func (s *userStore) ListUsers(_ context.Context, f identity.ListFilter) ([]*identity.User, int64, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	q := strings.ToUpper(f.Search)
+	matched := make([]*identity.User, 0, len(s.users))
+	for _, u := range s.users {
+		if q == "" || strings.Contains(u.NormalizedUserName, q) || strings.Contains(u.NormalizedEmail, q) {
+			matched = append(matched, u)
+		}
+	}
+	// Stable order by ID for deterministic pagination.
+	sort.Slice(matched, func(i, j int) bool { return matched[i].ID < matched[j].ID })
+	total := int64(len(matched))
+	lo := f.Offset
+	if lo > len(matched) {
+		lo = len(matched)
+	}
+	hi := lo + f.Limit
+	if f.Limit <= 0 || hi > len(matched) {
+		hi = len(matched)
+	}
+	page := make([]*identity.User, 0, hi-lo)
+	for _, u := range matched[lo:hi] {
+		page = append(page, clone(u))
+	}
+	return page, total, nil
 }
 
 func (s *userStore) FindByEmail(_ context.Context, e string) (*identity.User, error) {

@@ -10,6 +10,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"errors"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -27,8 +28,9 @@ type RoleStore struct{ db *pgxpool.Pool }
 
 // Compile-time interface conformance.
 var (
-	_ identity.DefaultUserStore = (*UserStore)(nil)
-	_ identity.RoleStore        = (*RoleStore)(nil)
+	_ identity.DefaultUserStore                          = (*UserStore)(nil)
+	_ identity.RoleStore                                 = (*RoleStore)(nil)
+	_ identity.UserLister[identity.User, *identity.User] = (*UserStore)(nil)
 )
 
 func NewUserStore(db *pgxpool.Pool) *UserStore { return &UserStore{db: db} }
@@ -140,6 +142,32 @@ func (s *UserStore) FindByName(ctx context.Context, n string) (*identity.User, e
 
 func (s *UserStore) FindByEmail(ctx context.Context, e string) (*identity.User, error) {
 	return scanUser(s.db.QueryRow(ctx, `SELECT `+userCols+` FROM identity_users WHERE normalized_email=$1`, e))
+}
+
+const listWhere = `($1 = '' OR normalized_user_name LIKE '%'||$1||'%' OR normalized_email LIKE '%'||$1||'%')`
+
+// ListUsers implements identity.UserLister.
+func (s *UserStore) ListUsers(ctx context.Context, f identity.ListFilter) ([]*identity.User, int64, error) {
+	search := strings.ToUpper(f.Search)
+	var total int64
+	if err := s.db.QueryRow(ctx, `SELECT count(*) FROM identity_users WHERE `+listWhere, search).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+	rows, err := s.db.Query(ctx, `SELECT `+userCols+` FROM identity_users WHERE `+listWhere+` ORDER BY id LIMIT $2 OFFSET $3`,
+		search, f.Limit, f.Offset)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+	var out []*identity.User
+	for rows.Next() {
+		u, err := scanUser(rows)
+		if err != nil {
+			return nil, 0, err
+		}
+		out = append(out, u)
+	}
+	return out, total, rows.Err()
 }
 
 func (s *UserStore) AddToRole(ctx context.Context, u *identity.User, normalizedRoleName string) error {

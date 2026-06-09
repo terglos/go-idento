@@ -2,6 +2,7 @@ package gormstore
 
 import (
 	"context"
+	"strings"
 
 	"github.com/terglos/go-idento/identity"
 	"gorm.io/gorm"
@@ -78,6 +79,31 @@ func (s *GenericUserStore[T, PT]) FindByName(ctx context.Context, n string) (PT,
 
 func (s *GenericUserStore[T, PT]) FindByEmail(ctx context.Context, e string) (PT, error) {
 	return s.find(ctx, "normalized_email = ?", e)
+}
+
+// ListUsers implements identity.UserLister for the custom user type.
+func (s *GenericUserStore[T, PT]) ListUsers(ctx context.Context, f identity.ListFilter) ([]PT, int64, error) {
+	filtered := func() *gorm.DB {
+		q := s.db.WithContext(ctx).Model(new(T))
+		if f.Search != "" {
+			like := "%" + strings.ToUpper(f.Search) + "%"
+			q = q.Where("normalized_user_name LIKE ? OR normalized_email LIKE ?", like, like)
+		}
+		return q
+	}
+	var total int64
+	if err := filtered().Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	var rows []T
+	if err := filtered().Order("id").Limit(f.Limit).Offset(f.Offset).Find(&rows).Error; err != nil {
+		return nil, 0, err
+	}
+	page := make([]PT, len(rows))
+	for i := range rows {
+		page[i] = PT(&rows[i])
+	}
+	return page, total, nil
 }
 
 // Satellite operations key off the base user id and reuse the shared tables.

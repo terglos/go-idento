@@ -29,6 +29,7 @@ var (
 	ErrUserLockedOut            = newErr("UserLockedOut", "User is locked out.")
 	ErrInvalidToken             = newErr("InvalidToken", "Invalid token.")
 	ErrConcurrencyFailure       = newErr("ConcurrencyFailure", "Optimistic concurrency failure, object has been modified.")
+	ErrListNotSupported         = newErr("ListNotSupported", "The configured store does not support listing.")
 )
 
 // ErrNotFound is a sentinel that stores should return when a row is absent, so

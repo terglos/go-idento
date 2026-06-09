@@ -180,6 +180,17 @@ func (m *UserManagerOf[T, PT]) FindByEmail(ctx context.Context, email string) (P
 	return m.Store.FindByEmail(ctx, m.Normalizer.Normalize(email))
 }
 
+// ListUsers returns a page of users (and the total match count). It requires the
+// configured store to implement [UserLister]; otherwise it returns
+// [ErrListNotSupported]. The filter is clamped to sane page bounds.
+func (m *UserManagerOf[T, PT]) ListUsers(ctx context.Context, f ListFilter) ([]PT, int64, error) {
+	lister, ok := m.Store.(UserLister[T, PT])
+	if !ok {
+		return nil, 0, ErrListNotSupported
+	}
+	return lister.ListUsers(ctx, f.Clamp())
+}
+
 // --- Roles ---
 
 func (m *UserManagerOf[T, PT]) AddToRole(ctx context.Context, u PT, role string) error {

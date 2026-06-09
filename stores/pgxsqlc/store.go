@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -22,8 +23,9 @@ type UserStore struct{ q *gen.Queries }
 type RoleStore struct{ q *gen.Queries }
 
 var (
-	_ identity.DefaultUserStore = (*UserStore)(nil)
-	_ identity.RoleStore        = (*RoleStore)(nil)
+	_ identity.DefaultUserStore                          = (*UserStore)(nil)
+	_ identity.RoleStore                                 = (*RoleStore)(nil)
+	_ identity.UserLister[identity.User, *identity.User] = (*UserStore)(nil)
 )
 
 func NewUserStore(db *pgxpool.Pool) *UserStore { return &UserStore{q: gen.New(db)} }
@@ -136,6 +138,24 @@ func (s *UserStore) FindByEmail(ctx context.Context, e string) (*identity.User, 
 		return nil, mapNotFound(err)
 	}
 	return toUser(r), nil
+}
+
+// ListUsers implements identity.UserLister.
+func (s *UserStore) ListUsers(ctx context.Context, f identity.ListFilter) ([]*identity.User, int64, error) {
+	search := strings.ToUpper(f.Search)
+	total, err := s.q.CountUsers(ctx, search)
+	if err != nil {
+		return nil, 0, err
+	}
+	rows, err := s.q.ListUsers(ctx, gen.ListUsersParams{Search: search, Lim: int32(f.Limit), Off: int32(f.Offset)})
+	if err != nil {
+		return nil, 0, err
+	}
+	out := make([]*identity.User, len(rows))
+	for i, r := range rows {
+		out[i] = toUser(r)
+	}
+	return out, total, nil
 }
 
 func (s *UserStore) AddToRole(ctx context.Context, u *identity.User, normalizedRoleName string) error {
