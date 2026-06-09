@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        module: ['.', 'stores/gormstore', 'stores/pgxstore', 'stores/pgxsqlc']
+    defaults:
+      run:
+        working-directory: ${{ matrix.module }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+          check-latest: true
+      - name: Vet
+        run: go vet ./...
+      - name: Build
+        run: go build ./...
+      - name: Test (race + coverage)
+        run: go test -race -covermode=atomic ./...
+
+  fmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: 'stable' }
+      - name: gofmt
+        run: |
+          fmt=$(gofmt -l $(find . -name '*.go' -not -path '*/internal/sqlcgen/*'))
+          if [ -n "$fmt" ]; then echo "Unformatted:"; echo "$fmt"; exit 1; fi
+
+  lint:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        module: ['.', 'stores/gormstore', 'stores/pgxstore', 'stores/pgxsqlc']
+    defaults:
+      run:
+        working-directory: ${{ matrix.module }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: 'stable' }
+      - run: go install honnef.co/go/tools/cmd/staticcheck@latest
+      - name: staticcheck
+        run: staticcheck $(go list ./... | grep -v '/internal/sqlcgen')
+
+  vuln:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+          check-latest: true
+      - run: go install golang.org/x/vuln/cmd/govulncheck@latest
+      - name: govulncheck (all modules)
+        run: |
+          for m in . stores/gormstore stores/pgxstore stores/pgxsqlc; do
+            (cd "$m" && govulncheck ./...)
+          done
