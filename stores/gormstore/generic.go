@@ -36,7 +36,24 @@ func (s *GenericUserStore[T, PT]) Create(ctx context.Context, u PT) error {
 }
 
 func (s *GenericUserStore[T, PT]) Update(ctx context.Context, u PT) error {
-	return s.db.WithContext(ctx).Save(u).Error
+	b := u.Base()
+	old := b.ConcurrencyStamp
+	b.ConcurrencyStamp = identity.NewConcurrencyStamp()
+	res := s.db.WithContext(ctx).Model(u).Where("concurrency_stamp = ?", old).Select("*").Updates(u)
+	if res.Error != nil {
+		b.ConcurrencyStamp = old
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		b.ConcurrencyStamp = old
+		var count int64
+		s.db.WithContext(ctx).Model(u).Where("id = ?", b.ID).Count(&count)
+		if count == 0 {
+			return identity.ErrNotFound
+		}
+		return identity.ErrConcurrencyFailure
+	}
+	return nil
 }
 
 func (s *GenericUserStore[T, PT]) Delete(ctx context.Context, u PT) error {

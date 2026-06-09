@@ -87,14 +87,27 @@ func (s *UserStore) Create(ctx context.Context, u *identity.User) error {
 }
 
 func (s *UserStore) Update(ctx context.Context, u *identity.User) error {
-	return s.q.UpdateUser(ctx, gen.UpdateUserParams{
+	newStamp := identity.NewConcurrencyStamp()
+	n, err := s.q.UpdateUser(ctx, gen.UpdateUserParams{
 		ID: u.ID, UserName: u.UserName, NormalizedUserName: u.NormalizedUserName,
 		Email: u.Email, NormalizedEmail: u.NormalizedEmail, EmailConfirmed: u.EmailConfirmed,
-		PasswordHash: u.PasswordHash, SecurityStamp: u.SecurityStamp, ConcurrencyStamp: u.ConcurrencyStamp,
+		PasswordHash: u.PasswordHash, SecurityStamp: u.SecurityStamp,
+		NewConcurrencyStamp: newStamp, OldConcurrencyStamp: u.ConcurrencyStamp,
 		PhoneNumber: u.PhoneNumber, PhoneNumberConfirmed: u.PhoneNumberConfirmed,
 		TwoFactorEnabled: u.TwoFactorEnabled, LockoutEnd: u.LockoutEnd, LockoutEnabled: u.LockoutEnabled,
 		AccessFailedCount: int32(u.AccessFailedCount), Attributes: attrsToJSON(u.Attributes),
 	})
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		if _, e := s.q.GetUserByID(ctx, u.ID); errors.Is(e, pgx.ErrNoRows) {
+			return identity.ErrNotFound
+		}
+		return identity.ErrConcurrencyFailure
+	}
+	u.ConcurrencyStamp = newStamp
+	return nil
 }
 
 func (s *UserStore) Delete(ctx context.Context, u *identity.User) error {

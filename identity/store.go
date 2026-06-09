@@ -16,6 +16,10 @@ type Ptr[T any] interface {
 // fixes it to the plain *User and is what the concrete stores implement.
 type UserStore[T any, PT Ptr[T]] interface {
 	Create(ctx context.Context, u PT) error
+	// Update persists changes with optimistic concurrency: it matches the row by
+	// id AND the user's current ConcurrencyStamp, rotates the stamp on success
+	// (updating u in place), and returns [ErrConcurrencyFailure] if no row
+	// matched (a concurrent write won), or [ErrNotFound] if the user is gone.
 	Update(ctx context.Context, u PT) error
 	Delete(ctx context.Context, u PT) error
 

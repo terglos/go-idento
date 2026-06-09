@@ -49,7 +49,23 @@ func (s *UserStore) Create(ctx context.Context, u *identity.User) error {
 }
 
 func (s *UserStore) Update(ctx context.Context, u *identity.User) error {
-	return s.db.WithContext(ctx).Save(u).Error
+	old := u.ConcurrencyStamp
+	u.ConcurrencyStamp = identity.NewConcurrencyStamp()
+	res := s.db.WithContext(ctx).Model(u).Where("concurrency_stamp = ?", old).Select("*").Updates(u)
+	if res.Error != nil {
+		u.ConcurrencyStamp = old
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		u.ConcurrencyStamp = old
+		var count int64
+		s.db.WithContext(ctx).Model(&identity.User{}).Where("id = ?", u.ID).Count(&count)
+		if count == 0 {
+			return identity.ErrNotFound
+		}
+		return identity.ErrConcurrencyFailure
+	}
+	return nil
 }
 
 func (s *UserStore) Delete(ctx context.Context, u *identity.User) error {

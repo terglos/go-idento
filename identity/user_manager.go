@@ -246,6 +246,10 @@ func (m *UserManagerOf[T, PT]) ResetAccessFailedCount(ctx context.Context, u PT)
 	return m.Store.Update(ctx, u)
 }
 
+// NewConcurrencyStamp returns a fresh optimistic-concurrency token. Stores call
+// it when rotating ConcurrencyStamp on a successful Update.
+func NewConcurrencyStamp() string { return uuid.NewString() }
+
 func newStamp() string {
 	b := make([]byte, 20)
 	if _, err := rand.Read(b); err != nil {

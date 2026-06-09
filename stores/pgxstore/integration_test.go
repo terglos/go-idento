@@ -97,4 +97,16 @@ func TestPgxIntegration(t *testing.T) {
 	if r, f := sm.ExternalLoginSignIn(ctx, "GitHub", "gh-9"); !r.Succeeded || f == nil || f.ID != signed.ID {
 		t.Fatalf("external login failed: %+v", r)
 	}
+
+	// Optimistic concurrency against real Postgres: stale write loses.
+	a, _ := um.FindByID(ctx, signed.ID)
+	b, _ := um.FindByID(ctx, signed.ID)
+	a.SetAttribute("k", "1")
+	if err := um.Store.Update(ctx, a); err != nil {
+		t.Fatalf("first update should win: %v", err)
+	}
+	b.SetAttribute("k", "2")
+	if err := um.Store.Update(ctx, b); err != identity.ErrConcurrencyFailure {
+		t.Fatalf("stale update must fail with ErrConcurrencyFailure, got %v", err)
+	}
 }

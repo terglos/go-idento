@@ -566,18 +566,19 @@ func (q *Queries) UpdateRole(ctx context.Context, arg UpdateRoleParams) error {
 	return err
 }
 
-const updateUser = `-- name: UpdateUser :exec
+const updateUser = `-- name: UpdateUser :execrows
 UPDATE identity_users SET
-    user_name=$2, normalized_user_name=$3, email=$4, normalized_email=$5,
-    email_confirmed=$6, password_hash=$7, security_stamp=$8, concurrency_stamp=$9,
-    phone_number=$10, phone_number_confirmed=$11, two_factor_enabled=$12,
-    lockout_end=$13, lockout_enabled=$14, access_failed_count=$15, attributes=$16,
-    updated_at=now()
-WHERE id=$1
+    user_name = $1, normalized_user_name = $2, email = $3,
+    normalized_email = $4, email_confirmed = $5,
+    password_hash = $6, security_stamp = $7,
+    concurrency_stamp = $8, phone_number = $9,
+    phone_number_confirmed = $10, two_factor_enabled = $11,
+    lockout_end = $12, lockout_enabled = $13,
+    access_failed_count = $14, attributes = $15, updated_at = now()
+WHERE id = $16 AND concurrency_stamp = $17
 `
 
 type UpdateUserParams struct {
-	ID                   string
 	UserName             string
 	NormalizedUserName   string
 	Email                string
@@ -585,7 +586,7 @@ type UpdateUserParams struct {
 	EmailConfirmed       bool
 	PasswordHash         string
 	SecurityStamp        string
-	ConcurrencyStamp     string
+	NewConcurrencyStamp  string
 	PhoneNumber          string
 	PhoneNumberConfirmed bool
 	TwoFactorEnabled     bool
@@ -593,11 +594,12 @@ type UpdateUserParams struct {
 	LockoutEnabled       bool
 	AccessFailedCount    int32
 	Attributes           json.RawMessage
+	ID                   string
+	OldConcurrencyStamp  string
 }
 
-func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) error {
-	_, err := q.db.Exec(ctx, updateUser,
-		arg.ID,
+func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateUser,
 		arg.UserName,
 		arg.NormalizedUserName,
 		arg.Email,
@@ -605,7 +607,7 @@ func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) error {
 		arg.EmailConfirmed,
 		arg.PasswordHash,
 		arg.SecurityStamp,
-		arg.ConcurrencyStamp,
+		arg.NewConcurrencyStamp,
 		arg.PhoneNumber,
 		arg.PhoneNumberConfirmed,
 		arg.TwoFactorEnabled,
@@ -613,8 +615,13 @@ func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) error {
 		arg.LockoutEnabled,
 		arg.AccessFailedCount,
 		arg.Attributes,
+		arg.ID,
+		arg.OldConcurrencyStamp,
 	)
-	return err
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const upsertUserToken = `-- name: UpsertUserToken :exec

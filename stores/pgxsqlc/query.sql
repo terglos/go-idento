@@ -8,14 +8,16 @@ INSERT INTO identity_users (
     $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16
 );
 
--- name: UpdateUser :exec
+-- name: UpdateUser :execrows
 UPDATE identity_users SET
-    user_name=$2, normalized_user_name=$3, email=$4, normalized_email=$5,
-    email_confirmed=$6, password_hash=$7, security_stamp=$8, concurrency_stamp=$9,
-    phone_number=$10, phone_number_confirmed=$11, two_factor_enabled=$12,
-    lockout_end=$13, lockout_enabled=$14, access_failed_count=$15, attributes=$16,
-    updated_at=now()
-WHERE id=$1;
+    user_name = @user_name, normalized_user_name = @normalized_user_name, email = @email,
+    normalized_email = @normalized_email, email_confirmed = @email_confirmed,
+    password_hash = @password_hash, security_stamp = @security_stamp,
+    concurrency_stamp = @new_concurrency_stamp, phone_number = @phone_number,
+    phone_number_confirmed = @phone_number_confirmed, two_factor_enabled = @two_factor_enabled,
+    lockout_end = @lockout_end, lockout_enabled = @lockout_enabled,
+    access_failed_count = @access_failed_count, attributes = @attributes, updated_at = now()
+WHERE id = @id AND concurrency_stamp = @old_concurrency_stamp;
 
 -- name: DeleteUser :exec
 DELETE FROM identity_users WHERE id=$1;

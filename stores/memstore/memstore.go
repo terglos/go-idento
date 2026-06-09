@@ -72,9 +72,14 @@ func (s *userStore) Create(_ context.Context, u *identity.User) error {
 func (s *userStore) Update(_ context.Context, u *identity.User) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if _, ok := s.users[u.ID]; !ok {
+	cur, ok := s.users[u.ID]
+	if !ok {
 		return identity.ErrNotFound
 	}
+	if cur.ConcurrencyStamp != u.ConcurrencyStamp {
+		return identity.ErrConcurrencyFailure // a concurrent write won
+	}
+	u.ConcurrencyStamp = identity.NewConcurrencyStamp() // rotate on success
 	s.users[u.ID] = clone(u)
 	return nil
 }

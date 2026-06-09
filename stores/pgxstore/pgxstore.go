@@ -99,17 +99,30 @@ func (s *UserStore) Update(ctx context.Context, u *identity.User) error {
 	if err != nil {
 		return err
 	}
-	_, err = s.db.Exec(ctx, `UPDATE identity_users SET
+	old := u.ConcurrencyStamp
+	newStamp := identity.NewConcurrencyStamp()
+	tag, err := s.db.Exec(ctx, `UPDATE identity_users SET
 		user_name=$2, normalized_user_name=$3, email=$4, normalized_email=$5,
 		email_confirmed=$6, password_hash=$7, security_stamp=$8, concurrency_stamp=$9,
 		phone_number=$10, phone_number_confirmed=$11, two_factor_enabled=$12,
 		lockout_end=$13, lockout_enabled=$14, access_failed_count=$15, attributes=$16, updated_at=now()
-		WHERE id=$1`,
+		WHERE id=$1 AND concurrency_stamp=$17`,
 		u.ID, u.UserName, u.NormalizedUserName, u.Email, u.NormalizedEmail,
-		u.EmailConfirmed, u.PasswordHash, u.SecurityStamp, u.ConcurrencyStamp,
+		u.EmailConfirmed, u.PasswordHash, u.SecurityStamp, newStamp,
 		u.PhoneNumber, u.PhoneNumberConfirmed, u.TwoFactorEnabled, u.LockoutEnd,
-		u.LockoutEnabled, u.AccessFailedCount, attrs)
-	return err
+		u.LockoutEnabled, u.AccessFailedCount, attrs, old)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		var exists bool
+		if e := s.db.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM identity_users WHERE id=$1)`, u.ID).Scan(&exists); e == nil && !exists {
+			return identity.ErrNotFound
+		}
+		return identity.ErrConcurrencyFailure
+	}
+	u.ConcurrencyStamp = newStamp
+	return nil
 }
 
 func (s *UserStore) Delete(ctx context.Context, u *identity.User) error {

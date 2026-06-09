@@ -24,10 +24,9 @@ type User struct {
 	// issued tokens lets us revoke them by bumping the stamp.
 	SecurityStamp string `gorm:"type:varchar(64)" json:"-"`
 
-	// ConcurrencyStamp is a per-write token reserved for optimistic-concurrency
-	// checks. It is generated and persisted, but the bundled stores do not yet
-	// enforce it on update (planned). Do not rely on it for lost-update
-	// protection today.
+	// ConcurrencyStamp is a per-write token for optimistic concurrency. Stores
+	// match it on Update and rotate it on success, so a stale write loses with
+	// [ErrConcurrencyFailure] (guards against lost updates).
 	ConcurrencyStamp string `gorm:"type:varchar(64)" json:"-"`
 
 	PhoneNumber          string `gorm:"type:varchar(32)" json:"phoneNumber"`
