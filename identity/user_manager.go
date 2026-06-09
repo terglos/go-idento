@@ -299,6 +299,10 @@ func (m *UserManagerOf[T, PT]) AddPassword(ctx context.Context, u PT, password s
 // RemovePassword clears the user's local password (e.g. to force external-login
 // only). The security stamp is rotated. It is a no-op-safe call: removing an
 // already-absent password still rotates the stamp and persists.
+//
+// Caller responsibility: this does not check that another sign-in method (an
+// external login) exists, so removing the only credential leaves the account
+// unauthenticatable — verify the user has a login before calling if that matters.
 func (m *UserManagerOf[T, PT]) RemovePassword(ctx context.Context, u PT) error {
 	b := u.Base()
 	b.PasswordHash = ""

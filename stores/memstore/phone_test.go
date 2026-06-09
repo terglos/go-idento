@@ -52,3 +52,28 @@ func TestPhoneChangeFlow(t *testing.T) {
 		t.Fatalf("change token must be single-use, got %v", err)
 	}
 }
+
+// TestPhoneCodeBruteForceCap verifies a code is invalidated after too many wrong
+// guesses, so the 6-digit space can't be brute-forced within the TTL.
+func TestPhoneCodeBruteForceCap(t *testing.T) {
+	ctx := context.Background()
+	h := newHarness()
+	u := mustUser(t, h, "phoebe", "Abcdef1!")
+	_ = h.users.SetPhoneNumber(ctx, u, "+15550003333")
+
+	code, err := h.users.GeneratePhoneToken(ctx, u)
+	if err != nil {
+		t.Fatalf("GeneratePhoneToken: %v", err)
+	}
+
+	// Exhaust the attempt budget with wrong codes.
+	for i := 0; i < identity.PhoneTokenMaxAttempts; i++ {
+		if ok, _ := h.users.VerifyPhoneToken(ctx, u, "999999"); ok {
+			t.Fatal("wrong code must not verify")
+		}
+	}
+	// Even the CORRECT code is now rejected — the token was invalidated.
+	if ok, _ := h.users.VerifyPhoneToken(ctx, u, code); ok {
+		t.Fatal("token should be invalidated after exceeding the attempt cap")
+	}
+}

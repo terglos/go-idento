@@ -37,14 +37,57 @@ func (m *UserManagerOf[T, PT]) WithSMSSender(s SMSSender) *UserManagerOf[T, PT] 
 	return m
 }
 
+// PhoneTokenMaxAttempts caps wrong guesses against a single issued SMS code
+// before it is invalidated, bounding brute-force of the 6-digit code space
+// within the (short) validity window.
+var PhoneTokenMaxAttempts = 5
+
+// phoneCodeValue formats the stored token: "<hash>:<expiryUnix>:<attempts>".
+func phoneCodeValue(hash string, exp int64, attempts int) string {
+	return hash + ":" + strconv.FormatInt(exp, 10) + ":" + strconv.Itoa(attempts)
+}
+
+// consumePhoneCode validates candidateHash against the token stored under name,
+// enforcing expiry and a wrong-guess cap. A correct match consumes the token and
+// returns true; a miss increments the attempt counter and invalidates the token
+// once [PhoneTokenMaxAttempts] is reached (so a code can't be brute-forced).
+func (m *UserManagerOf[T, PT]) consumePhoneCode(ctx context.Context, u PT, name, candidateHash string) (bool, error) {
+	stored, err := m.Store.GetToken(ctx, u, internalProvider, name)
+	if err != nil || stored == "" {
+		return false, err
+	}
+	parts := strings.Split(stored, ":")
+	if len(parts) < 2 {
+		return false, nil
+	}
+	hashPart := parts[0]
+	exp, err := strconv.ParseInt(parts[1], 10, 64)
+	if err != nil || nowFn().After(time.Unix(exp, 0)) {
+		_ = m.Store.RemoveToken(ctx, u, internalProvider, name) // expired/malformed
+		return false, nil
+	}
+	if subtle.ConstantTimeCompare([]byte(hashPart), []byte(candidateHash)) == 1 {
+		_ = m.Store.RemoveToken(ctx, u, internalProvider, name) // consume on success
+		return true, nil
+	}
+	attempts := 0
+	if len(parts) >= 3 {
+		attempts, _ = strconv.Atoi(parts[2])
+	}
+	if attempts+1 >= PhoneTokenMaxAttempts {
+		_ = m.Store.RemoveToken(ctx, u, internalProvider, name) // too many misses
+	} else {
+		_ = m.Store.SetToken(ctx, u, internalProvider, name, phoneCodeValue(hashPart, exp, attempts+1))
+	}
+	return false, nil
+}
+
 // GeneratePhoneToken creates a 6-digit code, stores it hashed with an expiry,
 // and returns the plaintext code.
 func (m *UserManagerOf[T, PT]) GeneratePhoneToken(ctx context.Context, u PT) (string, error) {
 	code := randomDigits(6)
-	// stored value: "<hash>:<expiryUnix>"
 	exp := nowFn().Add(PhoneTokenTTL).Unix()
-	value := hashRefresh(code) + ":" + strconv.FormatInt(exp, 10)
-	if err := m.Store.SetToken(ctx, u, internalProvider, phoneTokenName, value); err != nil {
+	if err := m.Store.SetToken(ctx, u, internalProvider, phoneTokenName, phoneCodeValue(hashRefresh(code), exp, 0)); err != nil {
 		return "", err
 	}
 	return code, nil
@@ -67,26 +110,9 @@ func (m *UserManagerOf[T, PT]) SendPhoneToken(ctx context.Context, u PT) error {
 }
 
 // VerifyPhoneToken validates a code against the stored token (one-time use,
-// expiry-checked). On success the token is consumed.
+// expiry-checked, attempt-capped). On success the token is consumed.
 func (m *UserManagerOf[T, PT]) VerifyPhoneToken(ctx context.Context, u PT, code string) (bool, error) {
-	stored, err := m.Store.GetToken(ctx, u, internalProvider, phoneTokenName)
-	if err != nil || stored == "" {
-		return false, err
-	}
-	hashPart, expPart, ok := strings.Cut(stored, ":")
-	if !ok {
-		return false, nil
-	}
-	exp, err := strconv.ParseInt(expPart, 10, 64)
-	if err != nil || nowFn().After(time.Unix(exp, 0)) {
-		return false, nil // expired or malformed
-	}
-	if subtle.ConstantTimeCompare([]byte(hashPart), []byte(hashRefresh(strings.TrimSpace(code)))) != 1 {
-		return false, nil
-	}
-	// consume the token so it can't be replayed
-	_ = m.Store.RemoveToken(ctx, u, internalProvider, phoneTokenName)
-	return true, nil
+	return m.consumePhoneCode(ctx, u, phoneTokenName, hashRefresh(strings.TrimSpace(code)))
 }
 
 // ConfirmPhoneNumber validates an SMS code and marks the phone confirmed.
@@ -124,7 +150,7 @@ func (m *UserManagerOf[T, PT]) SetPhoneNumber(ctx context.Context, u PT, phone s
 func (m *UserManagerOf[T, PT]) GenerateChangePhoneNumberToken(ctx context.Context, u PT, newPhone string) (string, error) {
 	code := randomDigits(6)
 	exp := nowFn().Add(PhoneTokenTTL).Unix()
-	value := hashRefresh(code+"|"+newPhone) + ":" + strconv.FormatInt(exp, 10)
+	value := phoneCodeValue(hashRefresh(code+"|"+newPhone), exp, 0)
 	if err := m.Store.SetToken(ctx, u, internalProvider, changePhoneTokenName, value); err != nil {
 		return "", err
 	}
@@ -152,34 +178,19 @@ func (m *UserManagerOf[T, PT]) SendChangePhoneNumberToken(ctx context.Context, u
 // confirmed, rotates the security stamp and consumes the token. The token only
 // matches the exact number it was issued for.
 func (m *UserManagerOf[T, PT]) ChangePhoneNumber(ctx context.Context, u PT, newPhone, code string) error {
-	stored, err := m.Store.GetToken(ctx, u, internalProvider, changePhoneTokenName)
+	want := hashRefresh(strings.TrimSpace(code) + "|" + newPhone)
+	ok, err := m.consumePhoneCode(ctx, u, changePhoneTokenName, want)
 	if err != nil {
 		return err
 	}
-	if stored == "" {
-		return ErrInvalidToken
-	}
-	hashPart, expPart, ok := strings.Cut(stored, ":")
 	if !ok {
-		return ErrInvalidToken
-	}
-	exp, err := strconv.ParseInt(expPart, 10, 64)
-	if err != nil || nowFn().After(time.Unix(exp, 0)) {
-		return ErrInvalidToken
-	}
-	want := hashRefresh(strings.TrimSpace(code) + "|" + newPhone)
-	if subtle.ConstantTimeCompare([]byte(hashPart), []byte(want)) != 1 {
 		return ErrInvalidToken
 	}
 	b := u.Base()
 	b.PhoneNumber = newPhone
 	b.PhoneNumberConfirmed = true
 	b.SecurityStamp = newStamp()
-	if err := m.Store.Update(ctx, u); err != nil {
-		return err
-	}
-	_ = m.Store.RemoveToken(ctx, u, internalProvider, changePhoneTokenName)
-	return nil
+	return m.Store.Update(ctx, u)
 }
 
 func randomDigits(n int) string {

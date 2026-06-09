@@ -21,6 +21,14 @@ type GenericUserStore[T any, PT identity.Ptr[T]] struct {
 	t  tables
 }
 
+// Compile-time check that the generic store satisfies the full user store (and
+// the optional lister) for a representative type, so a new interface method is
+// caught here as well as on the concrete store.
+var (
+	_ identity.UserStore[identity.User, *identity.User]  = (*GenericUserStore[identity.User, *identity.User])(nil)
+	_ identity.UserLister[identity.User, *identity.User] = (*GenericUserStore[identity.User, *identity.User])(nil)
+)
+
 // NewUserStoreOf builds a generic user store for T.
 func NewUserStoreOf[T any, PT identity.Ptr[T]](db *gorm.DB, opts ...Option) *GenericUserStore[T, PT] {
 	return &GenericUserStore[T, PT]{db: db, t: resolveTables(resolve(opts...))}

@@ -4,6 +4,25 @@ Notable changes per release. Versions follow [SemVer](https://semver.org). This
 is a multi-module repo; all modules (`.`, `stores/gormstore`, `stores/pgxstore`,
 `stores/pgxsqlc`) share the same version tag.
 
+## v0.3.1
+
+Hardening pass (post-v0.3.0 double-check).
+
+### Fixed
+- **SMS code brute-force**: `VerifyPhoneToken` and `ChangePhoneNumber` now cap
+  wrong guesses per issued code (`PhoneTokenMaxAttempts`, default 5) and
+  invalidate the code once exceeded, so the 6-digit space can't be guessed
+  within the validity window. The stored token format gained an attempt counter
+  (internal/ephemeral — no migration).
+- Added the missing compile-time interface assertion that the generic GORM store
+  (`GenericUserStore[T,PT]`) satisfies `UserStore`/`UserLister`, so a future
+  interface method is caught on the generic path too.
+
+### Docs
+- `RemovePassword` now documents that the caller must ensure another sign-in
+  method exists (removing the only credential leaves the account
+  unauthenticatable).
+
 ## v0.3.0
 
 Feature parity pass against the reference identity framework (ASP.NET Core
