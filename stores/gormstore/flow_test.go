@@ -21,7 +21,7 @@ func setup(t *testing.T) (*identity.UserManager, *identity.RoleManager, *identit
 	}
 	um := identity.NewUserManager(gormstore.NewUserStore(db), identity.DefaultOptions())
 	rm := identity.NewRoleManager(gormstore.NewRoleStore(db))
-	ts := identity.NewTokenService(um, identity.DefaultTokenOptions([]byte("test-signing-key-32-bytes-long!!"), "go-identity", "api"))
+	ts := identity.NewTokenService(um, identity.DefaultTokenOptions([]byte("test-signing-key-32-bytes-long!!"), "go-idento", "api"))
 	return um, rm, ts
 }
 

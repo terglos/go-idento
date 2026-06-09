@@ -1,4 +1,4 @@
--- go-identity schema for PostgreSQL (raw, no ORM). Mirrors the AspNet* layout.
+-- go-idento schema for PostgreSQL (raw, no ORM).
 CREATE TABLE IF NOT EXISTS identity_users (
     id                     VARCHAR(36) PRIMARY KEY,
     user_name              VARCHAR(256),

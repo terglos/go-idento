@@ -1,6 +1,6 @@
 # migrations
 
-Versioned schema history for go-identity. The baseline matches
+Versioned schema history for go-idento. The baseline matches
 [`identity/migrations/postgres.sql`](../identity/migrations/postgres.sql).
 
 ## Choose your path

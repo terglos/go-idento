@@ -3,7 +3,6 @@ package identity
 import "context"
 
 // AddLogin associates an external (OAuth/OIDC) login with the user.
-// Mirrors UserManager.AddLoginAsync.
 func (m *UserManagerOf[T, PT]) AddLogin(ctx context.Context, u PT, login UserLoginInfo) error {
 	return m.Store.AddLogin(ctx, u, login)
 }
@@ -19,15 +18,13 @@ func (m *UserManagerOf[T, PT]) GetLogins(ctx context.Context, u PT) ([]UserLogin
 }
 
 // FindByLogin resolves the user behind an external login, if any.
-// Mirrors UserManager.FindByLoginAsync.
 func (m *UserManagerOf[T, PT]) FindByLogin(ctx context.Context, loginProvider, providerKey string) (PT, error) {
 	return m.Store.FindByLogin(ctx, loginProvider, providerKey)
 }
 
 // ExternalLoginSignIn signs in a user via an external login, applying the same
-// lockout/confirmation rules as password sign-in. Mirrors
-// SignInManager.ExternalLoginSignInAsync. Returns the result and the user
-// (nil when no account is linked to the external login).
+// lockout/confirmation rules as password sign-in. Returns the result and the
+// user (nil when no account is linked to the external login).
 func (s *SignInManagerOf[T, PT]) ExternalLoginSignIn(ctx context.Context, loginProvider, providerKey string) (SignInResult, PT) {
 	u, err := s.Users.FindByLogin(ctx, loginProvider, providerKey)
 	if err != nil || u == nil {

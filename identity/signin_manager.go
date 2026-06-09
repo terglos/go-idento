@@ -2,7 +2,7 @@ package identity
 
 import "context"
 
-// SignInResult mirrors Microsoft.AspNetCore.Identity.SignInResult.
+// SignInResult is the outcome of a sign-in attempt.
 type SignInResult struct {
 	Succeeded         bool
 	IsLockedOut       bool
@@ -11,7 +11,7 @@ type SignInResult struct {
 }
 
 // SignInManagerOf orchestrates credential checks, lockout and the "is allowed to
-// sign in" rules, mirroring SignInManager<TUser>. Generic over the user type; use
+// sign in" rules. Generic over the user type; use
 // [SignInManager] / [NewSignInManager] for the built-in user.
 type SignInManagerOf[T any, PT Ptr[T]] struct {
 	Users   *UserManagerOf[T, PT]
@@ -43,8 +43,8 @@ func (s *SignInManagerOf[T, PT]) CanSignIn(u PT) bool {
 	return true
 }
 
-// PasswordSignIn validates a username/password, applying lockout. Equivalent to
-// SignInManager.PasswordSignInAsync(userName, password, _, lockoutOnFailure).
+// PasswordSignIn validates a username + password, applying lockout on failure
+// when requested.
 func (s *SignInManagerOf[T, PT]) PasswordSignIn(ctx context.Context, userName, password string, lockoutOnFailure bool) (SignInResult, PT) {
 	u, err := s.Users.FindByName(ctx, userName)
 	if err != nil || u == nil {
@@ -78,7 +78,6 @@ func (s *SignInManagerOf[T, PT]) passwordSignInUser(ctx context.Context, u PT, p
 
 // TwoFactorAuthenticatorSignIn completes a sign-in that required 2FA, using a
 // TOTP code. Call after PasswordSignIn returned RequiresTwoFactor.
-// Mirrors SignInManager.TwoFactorAuthenticatorSignInAsync.
 func (s *SignInManagerOf[T, PT]) TwoFactorAuthenticatorSignIn(ctx context.Context, u PT, code string) SignInResult {
 	if s.Users.IsLockedOut(u) {
 		return SignInResult{IsLockedOut: true}

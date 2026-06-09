@@ -7,7 +7,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// RoleManager is the business-layer API for roles, mirroring RoleManager<TRole>.
+// RoleManager is the business-layer API for roles.
 type RoleManager struct {
 	Store      RoleStore
 	Normalizer Normalizer

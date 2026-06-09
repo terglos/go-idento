@@ -1,6 +1,6 @@
 # Architecture
 
-go-identity reproduces the three-layer design of ASP.NET Core Identity in Go.
+go-idento uses a clean three-layer design.
 
 ```
 Managers (business logic)   UserManager · RoleManager · SignInManager · TokenService
@@ -15,21 +15,21 @@ Swapping persistence (or testing) is just passing a different store.
 
 ## Layers & types
 
-| Concern | Type | .NET analog |
-|---|---|---|
-| User entity | `identity.User` (+ `Role`, `Claim`, join tables) | `IdentityUser` / `AspNet*` |
-| User business API | `UserManagerOf[T,PT]` (alias `UserManager`) | `UserManager<TUser>` |
-| Role business API | `RoleManager` | `RoleManager<TRole>` |
-| Sign-in orchestration | `SignInManagerOf[T,PT]` (alias `SignInManager`) | `SignInManager<TUser>` |
-| Tokens (JWT) | `TokenServiceOf[T,PT]` (alias `TokenService`) | `JwtBearer` (external in .NET) |
-| Persistence contract | `UserStore[T,PT]`, `RoleStore` | `IUserStore`, `IRoleStore` |
-| Password hashing | `PasswordHasher` (PBKDF2 v3) | `IPasswordHasher` |
-| JWT signing | `Signer` (`HMAC` HS256, `RSAKeyring` RS256, `ECDSAKeyring` ES256) | token signing key set |
-| Public key publishing | `JWKSProvider` + `auth.JWKSHandler` | JWKS endpoint |
-| SMS two-factor | `SMSSender` + phone token helpers | `PhoneNumberTokenProvider` |
-| Reset/confirm tokens | `DataTokenProvider` | `DataProtectorTokenProvider` |
-| Policy authz | `auth.Policy` + `RequirePolicy` | `AuthorizationPolicy` |
-| Options | `identity.Options` | `IdentityOptions` |
+| Concern | Type |
+|---|---|
+| User entity | `identity.User` (+ `Role`, `Claim`, join tables) |
+| User business API | `UserManagerOf[T,PT]` (alias `UserManager`) |
+| Role business API | `RoleManager` |
+| Sign-in orchestration | `SignInManagerOf[T,PT]` (alias `SignInManager`) |
+| Tokens (JWT) | `TokenServiceOf[T,PT]` (alias `TokenService`) |
+| Persistence contract | `UserStore[T,PT]`, `RoleStore` |
+| Password hashing | `PasswordHasher` (versioned PBKDF2) |
+| JWT signing | `Signer` (`HMAC` HS256, `RSAKeyring` RS256, `ECDSAKeyring` ES256) |
+| Public key publishing | `JWKSProvider` + `auth.JWKSHandler` |
+| SMS two-factor | `SMSSender` + phone token helpers |
+| Reset/confirm tokens | `DataTokenProvider` |
+| Policy authz | `auth.Policy` + `RequirePolicy` |
+| Options | `identity.Options` |
 
 ## The generics model (extending the user)
 
@@ -88,9 +88,9 @@ Refresh → verify stored hash, rotate (new pair, old refresh invalidated)
   `SecurityStamp`; it's embedded in every JWT and re-checked on validation, so
   outstanding access tokens are invalidated. Refresh tokens are stored hashed.
 - **Password hashing.** PBKDF2-HMAC-SHA256, 100k iterations, 128-bit salt,
-  256-bit subkey, encoded in the **.NET Identity v3 format** (marker `0x01` +
-  PRF/iteration/salt-length header) — hashes interoperate with .NET. Outdated
-  parameters trigger a transparent rehash on next successful login.
+  256-bit subkey, encoded in a **versioned format** (marker `0x01` +
+  PRF/iteration/salt-length header). Outdated parameters trigger a transparent
+  rehash on next successful login.
 - **TOTP** is RFC 6238 (HMAC-SHA1, 30s, ±1 step); recovery codes are one-time
   and stored hashed.
 - **Reset/confirm tokens** are HMAC over `userID|purpose|securityStamp` with an
@@ -103,15 +103,14 @@ Refresh → verify stored hash, rotate (new pair, old refresh invalidated)
 `auth.Middleware(tokens, cookies)` authenticates each request (Bearer token,
 falling back to an HttpOnly cookie), building a `Principal` (user + claims +
 roles) in the request context. Authorization is composed on top:
-`RequireAuth` (401 if anonymous), `RequireRole` and `RequirePolicy` (403 if the
-policy fails) — the analogs of `[Authorize]`, `[Authorize(Roles=)]` and
-`[Authorize(Policy=)]`.
+`RequireAuth` (401 if anonymous), and `RequireRole` / `RequirePolicy` (403 if the
+role or policy check fails).
 
 ## Stores
 
 All three implement the same interfaces; pick by need:
 
-- **gormstore** — Postgres/MySQL/SQLite from one codebase (closest to EF Core).
+- **gormstore** — Postgres/MySQL/SQLite from one codebase via an ORM.
   `generic.go` adds `NewUserStoreOf[T]` / `MigrateOf[T]` for custom user types.
 - **pgxstore** — raw `pgx` for PostgreSQL; hand-written SQL with an embedded
   `schema.sql`. `attributes` is `jsonb`. Concrete to `*User`.

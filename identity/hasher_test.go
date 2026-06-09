@@ -16,7 +16,7 @@ func TestPasswordHasherRoundTrip(t *testing.T) {
 }
 
 func TestPasswordHasherV3Marker(t *testing.T) {
-	// The encoded hash must start with the .NET v3 marker byte 0x01 once decoded.
+	// The encoded hash must start with the v3 format marker byte 0x01 once decoded.
 	h := NewPasswordHasher()
 	enc := h.Hash(&User{}, "abc")
 	if ok, rehash := h.Verify(&User{}, enc, "abc"); !ok || rehash {

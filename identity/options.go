@@ -2,7 +2,7 @@ package identity
 
 import "time"
 
-// Options aggregates the configuration knobs, mirroring IdentityOptions in .NET.
+// Options aggregates the configuration knobs (password, lockout, user, sign-in).
 type Options struct {
 	Password PasswordOptions
 	Lockout  LockoutOptions
@@ -10,7 +10,7 @@ type Options struct {
 	SignIn   SignInOptions
 }
 
-// PasswordOptions mirrors PasswordOptions: the password strength policy.
+// PasswordOptions is the password strength policy.
 type PasswordOptions struct {
 	RequiredLength         int
 	RequireDigit           bool
@@ -20,26 +20,26 @@ type PasswordOptions struct {
 	RequiredUniqueChars    int
 }
 
-// LockoutOptions mirrors LockoutOptions.
+// LockoutOptions is the account-lockout policy.
 type LockoutOptions struct {
 	AllowedForNewUsers      bool
 	MaxFailedAccessAttempts int
 	DefaultLockoutDuration  time.Duration
 }
 
-// UserOptions mirrors UserOptions.
+// UserOptions is the user-validation policy.
 type UserOptions struct {
 	RequireUniqueEmail        bool
 	AllowedUserNameCharacters string
 }
 
-// SignInOptions mirrors SignInOptions.
+// SignInOptions is the sign-in confirmation policy.
 type SignInOptions struct {
 	RequireConfirmedEmail       bool
 	RequireConfirmedPhoneNumber bool
 }
 
-// DefaultOptions returns the same defaults ASP.NET Core Identity ships with.
+// DefaultOptions returns sensible, secure defaults.
 func DefaultOptions() Options {
 	return Options{
 		Password: PasswordOptions{

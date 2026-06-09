@@ -42,7 +42,7 @@ func TestPgxIntegration(t *testing.T) {
 		WithTokenProvider(identity.NewDataTokenProvider([]byte("pg-int-secret"), time.Hour))
 	rm := identity.NewRoleManager(pgxstore.NewRoleStore(pool))
 	sm := identity.NewSignInManager(um)
-	ts := identity.NewTokenService(um, identity.DefaultTokenOptions([]byte("pg-int-signing-key-00000000000000"), "go-identity", "api"))
+	ts := identity.NewTokenService(um, identity.DefaultTokenOptions([]byte("pg-int-signing-key-00000000000000"), "go-idento", "api"))
 
 	if err := rm.Create(ctx, &identity.Role{Name: "Admin"}); err != nil {
 		t.Fatalf("create role: %v", err)

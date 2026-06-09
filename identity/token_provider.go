@@ -12,17 +12,17 @@ import (
 )
 
 // DataTokenProvider generates time-limited, purpose-bound, single-use-ish
-// tokens for email confirmation, password reset, etc. It is the Go analog of
-// .NET's DataProtectorTokenProvider: the token binds the user's SecurityStamp,
-// so any credential change (or another reset) invalidates outstanding tokens.
-// It operates on the base [User] fields and is not generic.
+// tokens for email confirmation, password reset, etc. The token binds the
+// user's SecurityStamp, so any credential change (or another reset)
+// invalidates outstanding tokens. It operates on the base [User] fields and is
+// not generic.
 type DataTokenProvider struct {
 	key      []byte        // server-side secret
 	lifespan time.Duration // token validity window
 }
 
-// NewDataTokenProvider builds a provider; tokens expire after lifespan (the
-// .NET default is 1 day, 1 hour for two-factor). Use a stable secret per app.
+// NewDataTokenProvider builds a provider; tokens expire after lifespan (a day
+// is a reasonable default). Use a stable secret per app.
 func NewDataTokenProvider(key []byte, lifespan time.Duration) *DataTokenProvider {
 	if lifespan == 0 {
 		lifespan = 24 * time.Hour
@@ -86,7 +86,7 @@ func (m *UserManagerOf[T, PT]) WithTokenProvider(p *DataTokenProvider) *UserMana
 	return m
 }
 
-// GenerateEmailConfirmationToken mirrors UserManager.GenerateEmailConfirmationTokenAsync.
+// GenerateEmailConfirmationToken issues a token to confirm the user's email.
 func (m *UserManagerOf[T, PT]) GenerateEmailConfirmationToken(u PT) string {
 	return m.Tokens.Generate(purposeEmailConfirmation, u.Base())
 }
@@ -101,7 +101,7 @@ func (m *UserManagerOf[T, PT]) ConfirmEmail(ctx context.Context, u PT, token str
 	return m.Store.Update(ctx, u)
 }
 
-// GeneratePasswordResetToken mirrors UserManager.GeneratePasswordResetTokenAsync.
+// GeneratePasswordResetToken issues a token to reset the user's password.
 func (m *UserManagerOf[T, PT]) GeneratePasswordResetToken(u PT) string {
 	return m.Tokens.Generate(purposePasswordReset, u.Base())
 }

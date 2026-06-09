@@ -35,7 +35,7 @@ func (m *UserManagerOf[T, PT]) WithSMSSender(s SMSSender) *UserManagerOf[T, PT] 
 }
 
 // GeneratePhoneToken creates a 6-digit code, stores it hashed with an expiry,
-// and returns the plaintext code. Mirrors PhoneNumberTokenProvider in .NET.
+// and returns the plaintext code.
 func (m *UserManagerOf[T, PT]) GeneratePhoneToken(ctx context.Context, u PT) (string, error) {
 	code := randomDigits(6)
 	// stored value: "<hash>:<expiryUnix>"

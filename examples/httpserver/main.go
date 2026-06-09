@@ -31,7 +31,7 @@ func main() {
 	users := identity.NewUserManager(gormstore.NewUserStore(db), identity.DefaultOptions())
 	signIn := identity.NewSignInManager(users)
 	tokens := identity.NewTokenService(users,
-		identity.DefaultTokenOptions([]byte("change-me-32-byte-minimum-secret!"), "go-identity", "api"))
+		identity.DefaultTokenOptions([]byte("change-me-32-byte-minimum-secret!"), "go-idento", "api"))
 	cookies := auth.DefaultCookieAuth()
 	cookies.Secure = false // demo over http
 

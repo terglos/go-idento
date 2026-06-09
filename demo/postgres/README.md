@@ -1,6 +1,6 @@
-# go-identity — PostgreSQL demo
+# go-idento — PostgreSQL demo
 
-A complete, runnable example of **go-identity** backed by **PostgreSQL** using
+A complete, runnable example of **go-idento** backed by **PostgreSQL** using
 the raw `pgx` store. It demonstrates the full flow: registration, password
 login (JWT + cookie), token refresh, protected and role-gated endpoints, and
 TOTP two-factor with recovery codes.

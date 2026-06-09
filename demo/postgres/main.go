@@ -1,4 +1,4 @@
-// Command postgres-demo runs go-identity against a real PostgreSQL database
+// Command postgres-demo runs go-idento against a real PostgreSQL database
 // using the raw pgx store. It exposes a small HTTP API covering the full flow:
 // register, login (JWT + cookie), refresh, a protected endpoint, a role-gated
 // endpoint, and TOTP two-factor setup/verification.
@@ -58,7 +58,7 @@ func main() {
 		WithTokenProvider(identity.NewDataTokenProvider([]byte(env("TOKEN_SECRET", "demo-token-secret-change-me")), time.Hour))
 	roles := identity.NewRoleManager(pgxstore.NewRoleStore(pool))
 	tokens := identity.NewTokenService(users,
-		identity.DefaultTokenOptions([]byte(env("JWT_SECRET", "demo-jwt-secret-change-me-please!")), "go-identity-demo", "api"))
+		identity.DefaultTokenOptions([]byte(env("JWT_SECRET", "demo-jwt-secret-change-me-please!")), "go-idento-demo", "api"))
 	cookies := auth.DefaultCookieAuth()
 	cookies.Secure = false // demo runs over http
 
@@ -190,7 +190,7 @@ func (a *app) twoFactorSetup(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]string{
 		"sharedKey":        key,
-		"authenticatorUri": identity.AuthenticatorURI("go-identity-demo", u.Email, key),
+		"authenticatorUri": identity.AuthenticatorURI("go-idento-demo", u.Email, key),
 		"hint":             "add the URI to an authenticator app, then POST /2fa/enable with a code",
 	})
 }

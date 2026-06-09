@@ -1,4 +1,4 @@
-// Package migrations exposes the canonical go-identity schema as an embedded
+// Package migrations exposes the canonical go-idento schema as an embedded
 // asset, so applications can bootstrap the database with the standard
 // library's database/sql — no ORM, no external migration CLI required.
 //

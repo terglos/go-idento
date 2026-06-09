@@ -6,8 +6,7 @@ import (
 )
 
 // Requirement is a single condition a principal must satisfy. A Policy is an
-// AND of requirements, mirroring ASP.NET's AuthorizationPolicy /
-// IAuthorizationRequirement model.
+// AND of requirements.
 type Requirement func(*Principal) bool
 
 // Policy is a named set of requirements (all must pass).
@@ -24,7 +23,7 @@ type Policy struct {
 //	    RequireAssertion(func(p *auth.Principal) bool { return p.User.EmailConfirmed })
 func NewPolicy(name string) *Policy { return &Policy{Name: name} }
 
-// RequireRole adds a role requirement (RequireRole in .NET).
+// RequireRole adds a role requirement (any of the given roles satisfies it).
 func (p *Policy) RequireRole(roles ...string) *Policy {
 	p.Requirements = append(p.Requirements, func(pr *Principal) bool {
 		for _, r := range roles {
@@ -38,7 +37,7 @@ func (p *Policy) RequireRole(roles ...string) *Policy {
 }
 
 // RequireClaim requires a claim of claimType; if allowedValues are given, the
-// claim's value must be one of them (RequireClaim in .NET).
+// claim's value must be one of them.
 func (p *Policy) RequireClaim(claimType string, allowedValues ...string) *Policy {
 	p.Requirements = append(p.Requirements, func(pr *Principal) bool {
 		v, ok := pr.ClaimValue(claimType)
@@ -58,7 +57,7 @@ func (p *Policy) RequireClaim(claimType string, allowedValues ...string) *Policy
 	return p
 }
 
-// RequireAssertion adds an arbitrary predicate (RequireAssertion in .NET).
+// RequireAssertion adds an arbitrary predicate.
 func (p *Policy) RequireAssertion(fn func(*Principal) bool) *Policy {
 	p.Requirements = append(p.Requirements, fn)
 	return p
@@ -106,8 +105,8 @@ func (pr *Principal) HasClaim(claimType string, value ...string) bool {
 	return strings.EqualFold(v, value[0])
 }
 
-// RequirePolicy is HTTP middleware enforcing a policy, the analog of
-// [Authorize(Policy = "...")]. 401 if anonymous, 403 if the policy fails.
+// RequirePolicy is HTTP middleware enforcing a named policy on a route.
+// 401 if anonymous, 403 if the policy fails.
 func RequirePolicy(policy *Policy) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -11,8 +11,7 @@
 Two related questions:
 
 1. **How does a consumer add custom columns** (e.g. `TenantID`, `FirstName`,
-   `AvatarURL`) to the user — the thing ASP.NET Core Identity solves by
-   subclassing `IdentityUser` + `UserManager<TUser>`?
+   `AvatarURL`) to the user?
 2. **What migration mechanism** ships the core schema *and* the user's
    additions to production safely?
 
@@ -23,19 +22,14 @@ to track.
 
 ## Part 1 — Extending the user
 
-### How .NET does it (the bar)
+### The goal
 
-```csharp
-public class ApplicationUser : IdentityUser {        // subclass
-    public string FirstName { get; set; }
-}
-services.AddIdentity<ApplicationUser, IdentityRole>();// UserManager<ApplicationUser>
-// dotnet ef migrations add AddFirstName               // EF picks up the new column
-```
-
-Three ingredients: **subclassing**, **generic managers `UserManager<TUser>`**,
-and **EF migrations** that diff the model. Go has no inheritance, so we map
-"subclass" to **struct embedding** and "generic manager" to **Go generics**.
+We want the same ergonomic loop other mature identity stacks offer: define an
+extended user type, have the managers operate on it, and generate a migration
+for the new columns. Three ingredients make that work: a way to **extend the
+type** (Go: struct embedding), **generic managers** over that type (Go:
+generics), and a **migration tool** that diffs the model. The sections below map
+each to idiomatic Go.
 
 ### Our constraint today
 
@@ -74,7 +68,7 @@ db.Create(&Profile{UserID: u.ID, TenantID: "acme"})
 - ➖ Extra join / second write; custom fields not on the user row.
 - **Best for:** rich, queryable, indexed domain data owned by the app.
 
-### Option B — Claims as attributes (the lightweight .NET way)
+### Option B — Claims as attributes (lightweight)
 
 Store scalar extras as user claims (already implemented).
 
@@ -96,7 +90,7 @@ Add one `attributes jsonb` column to `identity_users` and a
 - ➖ Weakly typed; cross-DB story weaker (MySQL/SQLite JSON differs).
 - **Best for:** flexible, evolving, mostly-read metadata.
 
-### Option D — Generics over `TUser` (the faithful .NET port)
+### Option D — Generics over the user type (`TUser`)
 
 Make the managers and stores generic, with a small accessor interface that
 `identity.User` satisfies, so an embedding type satisfies it for free:
@@ -129,8 +123,7 @@ type User = identity.User
 type UserManager = UserManagerOf[*User] // existing concrete API keeps working
 ```
 
-- ✅ Most faithful to `UserManager<TUser>`; custom fields live **on the user row**
-  and are first-class.
+- ✅ Custom fields live **on the user row** and are first-class.
 - ✅ With GORM, `AutoMigrate(&AppUser{})` and Atlas pick up the new columns
   automatically — the real EF experience.
 - ➖ Large refactor: every signature becomes `[T]`; the accessor interface is
@@ -150,8 +143,7 @@ Phase it:
 2. **Next (strategic):** implement **Option D generics** as
    `identity.UserManagerOf[T]`, keep `UserManager` as a type alias for the
    concrete instantiation so nothing breaks, and scope generic extension to the
-   **GORM store** (document pgx as concrete-only). This is what makes us a true
-   peer of .NET Identity.
+   **GORM store** (document pgx as concrete-only).
 
 The accessor interface is the only real cost and is mechanical; everything else
 is renaming with `[T]`.
@@ -183,8 +175,8 @@ production team needs.
 ### Why Atlas is the strategic fit
 
 Atlas's **GORM provider** loads our GORM structs and runs
-`atlas migrate diff` to **auto-generate versioned SQL** from model changes — the
-exact EF Core experience. It supports Postgres/MySQL/SQLite (matching our GORM
+`atlas migrate diff` to **auto-generate versioned SQL** from model changes. It
+supports Postgres/MySQL/SQLite (matching our GORM
 store), declarative *and* versioned workflows, plus migration linting in CI.
 Crucially, it composes with **Option D**: when a consumer extends `AppUser`,
 Atlas regenerates the migration for their new columns automatically.
@@ -208,5 +200,5 @@ emit migrations in golang-migrate format, so the choices aren't exclusive.
 ### Net effect
 
 `extend AppUser struct` → `atlas migrate diff` → reviewed versioned SQL →
-`atlas migrate apply` (or goose/golang-migrate). That is the ASP.NET Core
-Identity "extend model + add migration" loop, reproduced in Go.
+`atlas migrate apply` (or goose/golang-migrate). A clean "extend model + add
+migration" loop in idiomatic Go.

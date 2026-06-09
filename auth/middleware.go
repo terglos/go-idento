@@ -1,6 +1,6 @@
 // Package auth provides HTTP middleware that turns a validated identity into a
 // request-scoped principal, plus cookie-session helpers — the transport layer
-// on top of the identity core, analogous to ASP.NET's authentication handlers.
+// on top of the identity core.
 package auth
 
 import (
@@ -16,8 +16,7 @@ type ctxKey int
 
 const principalKey ctxKey = 0
 
-// Principal is the authenticated user attached to the request context, the Go
-// equivalent of ClaimsPrincipal/HttpContext.User.
+// Principal is the authenticated user attached to the request context.
 type Principal struct {
 	User   *identity.User
 	Claims jwt.MapClaims
@@ -43,7 +42,7 @@ func PrincipalFrom(ctx context.Context) (*Principal, bool) {
 
 // Middleware authenticates via Bearer token (and falls back to a session
 // cookie) and attaches the Principal. It does NOT reject anonymous requests —
-// compose [RequireAuth] for that, mirroring authentication vs authorization.
+// compose [RequireAuth] for that (authentication vs authorization).
 func Middleware(tokens *identity.TokenService, cookies *CookieAuth) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -100,7 +99,7 @@ func rolesFromClaims(claims jwt.MapClaims) []string {
 	return nil
 }
 
-// RequireAuth rejects anonymous requests with 401 ([Authorize]).
+// RequireAuth rejects anonymous requests with 401.
 func RequireAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if _, ok := PrincipalFrom(r.Context()); !ok {
@@ -111,8 +110,7 @@ func RequireAuth(next http.Handler) http.Handler {
 	})
 }
 
-// RequireRole rejects requests whose principal lacks the role with 403
-// ([Authorize(Roles = "...")]).
+// RequireRole rejects requests whose principal lacks the role with 403.
 func RequireRole(role string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

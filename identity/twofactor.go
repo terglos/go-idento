@@ -7,15 +7,15 @@ import (
 	"strings"
 )
 
-// Internal token provider/name keys, aligned with .NET's UserStore conventions.
+// Internal token provider/name keys used by the user-token store.
 const (
-	internalProvider     = "[AspNetUserStore]"
+	internalProvider     = "[go-idento]"
 	authenticatorKeyName = "AuthenticatorKey"
 	recoveryCodesName    = "RecoveryCodes"
 )
 
 // GetAuthenticatorKey returns the user's TOTP secret, generating and persisting
-// one on first use. Mirrors UserManager.GetAuthenticatorKeyAsync.
+// one on first use.
 func (m *UserManagerOf[T, PT]) GetAuthenticatorKey(ctx context.Context, u PT) (string, error) {
 	key, err := m.Store.GetToken(ctx, u, internalProvider, authenticatorKeyName)
 	if err != nil {
@@ -114,5 +114,5 @@ func randomRecoveryCode() string {
 		panic("identity: cannot read random recovery code: " + err.Error())
 	}
 	s := base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(b)
-	return strings.ToLower(s[:5] + "-" + s[5:10]) // grouped like aspnet
+	return strings.ToLower(s[:5] + "-" + s[5:10]) // grouped for readability
 }

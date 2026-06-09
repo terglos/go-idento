@@ -10,10 +10,9 @@ type Ptr[T any] interface {
 	UserModel
 }
 
-// UserStore abstracts user persistence, mirroring the composition of
-// IUserStore / IUserPasswordStore / IUserEmailStore / IUserRoleStore /
-// IUserClaimStore / IUserLockoutStore in .NET. It is generic over the user type
-// so stores can persist custom columns; the built-in [DefaultUserStore] alias
+// UserStore abstracts user persistence: identity fields, passwords, email,
+// roles, claims, lockout, tokens and external logins. It is generic over the
+// user type so stores can persist custom columns; the built-in [DefaultUserStore] alias
 // fixes it to the plain *User and is what the concrete stores implement.
 type UserStore[T any, PT Ptr[T]] interface {
 	Create(ctx context.Context, u PT) error
@@ -51,15 +50,14 @@ type UserStore[T any, PT Ptr[T]] interface {
 // gorm/pgx/in-memory stores satisfy out of the box.
 type DefaultUserStore = UserStore[User, *User]
 
-// UserLoginInfo describes an external login association, mirroring .NET's
-// UserLoginInfo.
+// UserLoginInfo describes an external (OAuth/OIDC) login association.
 type UserLoginInfo struct {
 	LoginProvider       string
 	ProviderKey         string
 	ProviderDisplayName string
 }
 
-// RoleStore abstracts role persistence, mirroring IRoleStore / IRoleClaimStore.
+// RoleStore abstracts role and role-claim persistence.
 type RoleStore interface {
 	Create(ctx context.Context, r *Role) error
 	Update(ctx context.Context, r *Role) error

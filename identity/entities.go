@@ -1,13 +1,12 @@
-// Package identity is a Go port of ASP.NET Core Identity: user/role management,
-// password hashing, claims, lockout, two-factor and token generation, built on
-// pluggable stores so the persistence layer can be swapped without touching the
-// business logic in the managers.
+// Package identity is a batteries-included identity framework for Go: user/role
+// management, password hashing, claims, lockout, two-factor and token
+// generation, built on pluggable stores so the persistence layer can be swapped
+// without touching the business logic in the managers.
 package identity
 
 import "time"
 
-// User mirrors the AspNetUsers entity (IdentityUser). The primary key is a
-// UUID stored as a string, matching the .NET default.
+// User is the core user entity. The primary key is a UUID stored as a string.
 type User struct {
 	ID string `gorm:"primaryKey;type:varchar(36)" json:"id"`
 
@@ -69,7 +68,7 @@ func (u *User) SetAttribute(key, value string) {
 
 func (User) TableName() string { return "identity_users" }
 
-// Role mirrors AspNetRoles (IdentityRole).
+// Role is a named role for role-based access control.
 type Role struct {
 	ID               string `gorm:"primaryKey;type:varchar(36)" json:"id"`
 	Name             string `gorm:"type:varchar(256)" json:"name"`
@@ -79,7 +78,7 @@ type Role struct {
 
 func (Role) TableName() string { return "identity_roles" }
 
-// UserRole is the join entity (AspNetUserRoles) with a composite key.
+// UserRole is the user-to-role join entity with a composite key.
 type UserRole struct {
 	UserID string `gorm:"primaryKey;type:varchar(36)" json:"userId"`
 	RoleID string `gorm:"primaryKey;type:varchar(36)" json:"roleId"`
@@ -87,7 +86,7 @@ type UserRole struct {
 
 func (UserRole) TableName() string { return "identity_user_roles" }
 
-// UserClaim mirrors AspNetUserClaims.
+// UserClaim is a claim attached to a user.
 type UserClaim struct {
 	ID         int64  `gorm:"primaryKey;autoIncrement" json:"id"`
 	UserID     string `gorm:"type:varchar(36);index" json:"userId"`
@@ -97,7 +96,7 @@ type UserClaim struct {
 
 func (UserClaim) TableName() string { return "identity_user_claims" }
 
-// RoleClaim mirrors AspNetRoleClaims.
+// RoleClaim is a claim attached to a role.
 type RoleClaim struct {
 	ID         int64  `gorm:"primaryKey;autoIncrement" json:"id"`
 	RoleID     string `gorm:"type:varchar(36);index" json:"roleId"`
@@ -107,7 +106,7 @@ type RoleClaim struct {
 
 func (RoleClaim) TableName() string { return "identity_role_claims" }
 
-// UserLogin mirrors AspNetUserLogins (external/social logins).
+// UserLogin is an external/social (OAuth/OIDC) login association.
 type UserLogin struct {
 	LoginProvider       string `gorm:"primaryKey;type:varchar(128)" json:"loginProvider"`
 	ProviderKey         string `gorm:"primaryKey;type:varchar(128)" json:"providerKey"`
@@ -117,7 +116,7 @@ type UserLogin struct {
 
 func (UserLogin) TableName() string { return "identity_user_logins" }
 
-// UserToken mirrors AspNetUserTokens (e.g. refresh tokens, 2FA recovery codes).
+// UserToken stores per-user tokens (refresh tokens, 2FA recovery codes, etc.).
 type UserToken struct {
 	UserID        string `gorm:"primaryKey;type:varchar(36)" json:"userId"`
 	LoginProvider string `gorm:"primaryKey;type:varchar(128)" json:"loginProvider"`
@@ -127,15 +126,14 @@ type UserToken struct {
 
 func (UserToken) TableName() string { return "identity_user_tokens" }
 
-// Claim is a type/value pair, the Go equivalent of System.Security.Claims.Claim.
+// Claim is a type/value pair attached to a user or role.
 type Claim struct {
 	Type  string `json:"type"`
 	Value string `json:"value"`
 }
 
 // UserModel is the contract a custom user type must satisfy to be managed by
-// the generic UserManagerOf[T]. It is the Go analog of `TUser : IdentityUser`
-// in ASP.NET Core Identity: a custom type embeds [User] and gets Base() for
+// the generic UserManagerOf[T]. A custom type embeds [User] and gets Base() for
 // free via method promotion, so the managers can read/write the standard
 // identity fields while the store persists the whole (extended) row.
 //

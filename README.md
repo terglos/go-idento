@@ -1,8 +1,9 @@
 # go-idento
 
-A Go port of **ASP.NET Core Identity** — user/role management, password hashing,
-claims, lockout, two-factor flags and JWT, built on pluggable stores so the
-persistence layer can be swapped without touching business logic.
+A complete, batteries-included **identity framework for Go** — user/role
+management, password hashing, claims, lockout, two-factor and JWT, built on
+pluggable stores so the persistence layer can be swapped without touching
+business logic.
 
 > Status: early. Core managers, GORM store, password hasher, JWT + cookie auth,
 > and an end-to-end example are implemented and tested.
@@ -14,28 +15,28 @@ persistence layer can be swapped without touching business logic.
 
 ## Why
 
-Go has JWT libraries and full IdPs (Ory, ZITADEL), but nothing with the
-embedded, batteries-included ergonomics of ASP.NET Core Identity
-(`UserManager` / `RoleManager` / `SignInManager` + pluggable stores). This fills
-that gap.
+Go has JWT libraries and full identity providers (Ory, ZITADEL), but no
+embedded, batteries-included identity toolkit you drop straight into your own
+app and own your data. go-idento fills that gap with familiar building blocks —
+`UserManager` / `RoleManager` / `SignInManager` over pluggable stores.
 
-## Mapping to ASP.NET Core Identity
+## What you get
 
-| ASP.NET Core Identity | go-identity |
+| Area | API |
 |---|---|
-| `IdentityUser` / `IdentityRole` | `identity.User` / `identity.Role` |
-| `AspNetUsers` … schema | `identity_users` … (same columns) |
-| `UserManager<TUser>` | `identity.UserManager` |
-| `RoleManager<TRole>` | `identity.RoleManager` |
-| `SignInManager<TUser>` | `identity.SignInManager` |
-| `IUserStore` / `IRoleStore` | `identity.UserStore` / `identity.RoleStore` |
-| `IPasswordHasher` (PBKDF2 v3) | `identity.PasswordHasher` (same wire format) |
-| `IdentityOptions` | `identity.Options` |
-| `[Authorize]` / `[Authorize(Roles=)]` | `auth.RequireAuth` / `auth.RequireRole` |
+| Entities | `identity.User` / `identity.Role` / `identity.Claim` |
+| Users | `identity.UserManager` (create, password, roles, claims, lockout, 2FA) |
+| Roles | `identity.RoleManager` |
+| Sign-in | `identity.SignInManager` (password, 2FA, external) |
+| Tokens | `identity.TokenService` (JWT access + refresh, HS256/RS256/ES256) |
+| Persistence | `identity.UserStore` / `identity.RoleStore` interfaces |
+| Password hashing | `identity.PasswordHasher` (PBKDF2, versioned format) |
+| Config | `identity.Options` |
+| HTTP | `auth.RequireAuth` / `auth.RequireRole` / `auth.RequirePolicy` |
 
-The default password hasher uses the **same v3 byte format as .NET**
-(`0x01` marker, PRF/iterations/salt-length header, PBKDF2-HMAC-SHA256), so hashes
-are interoperable for migrations.
+The default password hasher uses a **versioned PBKDF2 format**
+(`0x01` marker, PRF/iterations/salt-length header, PBKDF2-HMAC-SHA256); the
+version byte lets parameters evolve while old hashes keep verifying.
 
 ## Quick start
 
@@ -67,11 +68,11 @@ go run ./examples/httpserver
 
 ```
 identity/          core: entities, managers, hasher, options, JWT
-  entities.go      User/Role/Claim and the AspNet*-equivalent tables
+  entities.go      User/Role/Claim and the identity tables
   user_manager.go  UserManager (create, password, roles, claims, lockout)
   role_manager.go  RoleManager
   signin_manager.go SignInManager (+ SignInResult)
-  hasher.go        PBKDF2 v3 password hasher (.NET-compatible)
+  hasher.go        PBKDF2 password hasher (versioned format)
   token_service.go JWT access/refresh issuance + validation
   store.go         UserStore / RoleStore interfaces
 auth/              HTTP middleware: Bearer + cookie, RequireAuth/RequireRole/RequirePolicy
@@ -89,7 +90,7 @@ Four ways, smallest blast radius first (full analysis in
 [docs/design/extending-user-and-migrations.md](docs/design/extending-user-and-migrations.md)):
 
 ```go
-// Option D — custom typed columns on the user row (the .NET subclassing analog).
+// Option D — custom typed columns on the user row.
 type AppUser struct {
     identity.User          // embeds -> Base()/TableName() promoted
     TenantID string
@@ -132,7 +133,7 @@ EF `add-migration` loop. goose / golang-migrate can run the same SQL.
 ## Features
 
 - [x] User/role management (`UserManager`, `RoleManager`, `SignInManager`)
-- [x] PBKDF2 password hashing, **.NET v3-compatible** wire format
+- [x] PBKDF2 password hashing with a versioned wire format
 - [x] JWT access + refresh tokens with security-stamp revocation
 - [x] HS256, **RS256 and ES256** signing via pluggable `Signer` + `RSAKeyring` / `ECDSAKeyring` (kid rotation)
 - [x] **JWKS endpoint** (`auth.JWKSHandler`) publishing RSA/EC public keys

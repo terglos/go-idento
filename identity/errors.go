@@ -2,8 +2,8 @@ package identity
 
 import "errors"
 
-// IdentityError is the Go equivalent of IdentityError/IdentityResult.Errors in
-// .NET: a coded, human-readable failure that managers return instead of panicking.
+// IdentityError is a coded, human-readable failure that managers return instead
+// of panicking.
 type IdentityError struct {
 	Code        string
 	Description string
@@ -13,7 +13,7 @@ func (e *IdentityError) Error() string { return e.Code + ": " + e.Description }
 
 func newErr(code, desc string) *IdentityError { return &IdentityError{Code: code, Description: desc} }
 
-// Common errors, mirroring the IdentityErrorDescriber defaults.
+// Common errors with stable codes.
 var (
 	ErrUserNotFound             = newErr("UserNotFound", "User does not exist.")
 	ErrRoleNotFound             = newErr("RoleNotFound", "Role does not exist.")

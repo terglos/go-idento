@@ -1,4 +1,4 @@
-# Atlas configuration for go-identity (https://atlasgo.io).
+# Atlas configuration for go-idento (https://atlasgo.io).
 #
 # Default workflow uses the canonical schema file as the desired state — no Go
 # dependencies required:
@@ -6,7 +6,7 @@
 #   atlas migrate diff <name> --env local     # generate a versioned migration
 #   atlas migrate apply --env local --url <db-url>
 #
-# This reproduces the ASP.NET Core "add-migration" loop: edit the schema (or
+# This gives you a migrate-diff workflow: edit the schema (or
 # extend it via the generic UserManagerOf[T] + GORM provider, see below), then
 # diff to get reviewable, versioned SQL under ./migrations.
 

@@ -9,14 +9,13 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-// Standard claim types, aligned with the URIs ASP.NET emits so tokens issued
-// here are interchangeable with .NET consumers.
+// Claim names used in issued access tokens (idiomatic, short JWT claims).
 const (
-	ClaimNameIdentifier = "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier"
-	ClaimName           = "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name"
-	ClaimEmail          = "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress"
-	ClaimRole           = "http://schemas.microsoft.com/ws/2008/06/identity/claims/role"
-	ClaimSecurityStamp  = "AspNet.Identity.SecurityStamp"
+	ClaimNameIdentifier = "uid"
+	ClaimName           = "name"
+	ClaimEmail          = "email"
+	ClaimRole           = "roles"
+	ClaimSecurityStamp  = "idn_sstamp"
 )
 
 // TokenOptions configures JWT issuance.

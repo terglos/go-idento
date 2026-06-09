@@ -1,6 +1,5 @@
 // Package genericuser demonstrates Option D from the design doc: a custom user
-// type with first-class custom columns, managed by the generic UserManagerOf[T]
-// — the Go equivalent of subclassing IdentityUser + UserManager<TUser> in .NET.
+// type with first-class custom columns, managed by the generic UserManagerOf[T].
 package genericuser_test
 
 import (
@@ -36,7 +35,7 @@ func newManagers(t *testing.T) (*identity.UserManagerOf[AppUser, *AppUser], *ide
 	um := identity.NewUserManagerOf[AppUser](store, identity.DefaultOptions()).
 		WithTokenProvider(identity.NewDataTokenProvider([]byte("generic-secret"), time.Hour))
 	sm := identity.NewSignInManagerOf[AppUser](um)
-	ts := identity.NewTokenServiceOf[AppUser](um, identity.DefaultTokenOptions([]byte("generic-signing-key-0000000000000"), "go-identity", "api"))
+	ts := identity.NewTokenServiceOf[AppUser](um, identity.DefaultTokenOptions([]byte("generic-signing-key-0000000000000"), "go-idento", "api"))
 	return um, sm, ts
 }
 

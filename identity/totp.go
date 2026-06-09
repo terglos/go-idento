@@ -14,8 +14,7 @@ import (
 )
 
 // TOTP implements RFC 6238 (time-based one-time passwords), the algorithm
-// behind Google Authenticator / Authy. It mirrors the authenticator side of
-// ASP.NET's AuthenticatorTokenProvider.
+// behind authenticator apps such as Google Authenticator and Authy.
 type TOTP struct {
 	Digits int           // number of digits (default 6)
 	Period time.Duration // time step (default 30s)

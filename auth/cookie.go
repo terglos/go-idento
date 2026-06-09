@@ -5,9 +5,8 @@ import (
 	"time"
 )
 
-// CookieAuth stores the access token in an HttpOnly cookie, replicating the
-// cookie side of ASP.NET's SignInManager (browser sessions) alongside the
-// bearer-token flow used by APIs.
+// CookieAuth stores the access token in an HttpOnly cookie for browser
+// sessions, alongside the bearer-token flow used by APIs.
 type CookieAuth struct {
 	Name     string
 	Path     string

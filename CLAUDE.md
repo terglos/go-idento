@@ -4,21 +4,22 @@ Guidance for AI assistants (and humans) working in this repository.
 
 ## What this is
 
-`go-identity` (module `github.com/terglos/go-idento`) is a Go port of
-**ASP.NET Core Identity**: user/role management, password hashing, claims,
+`go-idento` (module `github.com/terglos/go-idento`) is a complete, embedded
+identity framework for Go: user/role management, password hashing, claims,
 lockout, two-factor, external logins and JWT — built on **pluggable stores** so
-persistence can be swapped without touching business logic. It deliberately
-mirrors the .NET API surface (`UserManager` / `RoleManager` / `SignInManager`,
-store interfaces, the `AspNet*` schema) so .NET developers feel at home.
+persistence can be swapped without touching business logic. The API is built
+around familiar building blocks (`UserManager` / `RoleManager` /
+`SignInManager` + store interfaces).
 
-Design goal: be a true peer of ASP.NET Core Identity, including the
-"extend the user model + generate a migration" workflow.
+Design goal: a batteries-included identity toolkit you embed in your own app and
+own your data, including the "extend the user model + generate a migration"
+workflow.
 
 ## Layout
 
 ```
 identity/              core (no DB dependency)
-  entities.go          User/Role/Claim + AspNet*-equivalent tables; UserModel + Base()
+  entities.go          User/Role/Claim + identity tables; UserModel + Base()
   user_manager.go      UserManagerOf[T,PT]  (alias UserManager = ...[User,*User])
   role_manager.go      RoleManager (concrete; roles are not generic)
   signin_manager.go    SignInManagerOf[T,PT] + SignInResult
@@ -31,7 +32,7 @@ identity/              core (no DB dependency)
   twofactor.go         authenticator key + one-time recovery codes (on UserManagerOf)
   phone.go             SMS two-factor (SMSSender, phone token generate/verify)
   external_login.go    OAuth/OIDC login association + ExternalLoginSignIn
-  hasher.go            PBKDF2 password hasher — .NET v3 wire format (interop)
+  hasher.go            PBKDF2 password hasher — versioned wire format (0x01 marker)
   options.go           IdentityOptions (password/lockout/user/signin policy)
   store.go             UserStore[T,PT] interface + DefaultUserStore alias; RoleStore
   migrations/          embed.FS canonical schema + ApplyPostgres (no CLI)
@@ -70,12 +71,12 @@ docs/                  architecture, getting-started, design records
   custom user types use `gormstore.NewUserStoreOf[T]`.
 - **Security stamp = revocation.** Password/2FA/email changes call `newStamp()`;
   it's embedded in JWTs and re-checked on validation, so old tokens die.
-- **Password hashes are .NET v3 compatible** (marker `0x01`, PRF/iter/salt-len
+- **Password hashes use a versioned format** (marker `0x01`, PRF/iter/salt-len
   header, PBKDF2-HMAC-SHA256). Don't change the wire format without a version bump.
 - **Errors** are typed `*IdentityError` with a code; stores return the
   `ErrNotFound` sentinel for missing rows.
 - **Normalization** is uppercase-invariant (`NormalizedUserName`/`Email`),
-  matching .NET; always look up by the normalized value.
+  always look up by the normalized value.
 
 ## Build / test
 
@@ -107,7 +108,7 @@ Smallest blast radius first; full analysis in
 - **B. Claims** as attributes — flow into the JWT.
 - **C. `Attributes` JSON column** — `u.SetAttribute(k,v)`; jsonb on Postgres.
 - **D. Generic `UserManagerOf[T]`** — typed custom columns on the user row
-  (`gormstore.NewUserStoreOf[T]` + `MigrateOf[T]`). The faithful .NET analog.
+  (`gormstore.NewUserStoreOf[T]` + `MigrateOf[T]`).
 
 ## Migrations
 

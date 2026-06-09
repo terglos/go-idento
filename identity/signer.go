@@ -9,7 +9,7 @@ import (
 
 // Signer abstracts JWT signing/verification so the token service can use
 // symmetric (HS256) or asymmetric (RS256/ES256) keys, with key rotation via the
-// "kid" header. This is the piece ASP.NET delegates to its JwtBearer key set.
+// "kid" header, so resource servers can validate tokens via a JWKS endpoint.
 type Signer interface {
 	// Method is the JWT signing algorithm.
 	Method() jwt.SigningMethod

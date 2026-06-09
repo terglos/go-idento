@@ -1,6 +1,6 @@
 // Package gormstore provides a GORM-backed implementation of the identity
 // UserStore and RoleStore, supporting Postgres, MySQL and SQLite from a single
-// codebase (the closest analog to EF Core under ASP.NET Identity).
+// codebase via a single ORM.
 package gormstore
 
 import (

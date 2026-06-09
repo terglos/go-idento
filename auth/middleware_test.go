@@ -20,7 +20,7 @@ func setup(t *testing.T) (*identity.UserManager, *identity.TokenService, *auth.C
 	if err := rm.Create(context.Background(), &identity.Role{Name: "Admin"}); err != nil {
 		t.Fatalf("role: %v", err)
 	}
-	ts := identity.NewTokenService(um, identity.DefaultTokenOptions([]byte("middleware-signing-key-0000000000"), "go-identity", "api"))
+	ts := identity.NewTokenService(um, identity.DefaultTokenOptions([]byte("middleware-signing-key-0000000000"), "go-idento", "api"))
 	cookies := auth.DefaultCookieAuth()
 	cookies.Secure = false
 	return um, ts, cookies

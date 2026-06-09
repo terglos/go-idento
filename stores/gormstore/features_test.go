@@ -123,7 +123,7 @@ func TestRSAKeyRotation(t *testing.T) {
 	k1, _ := rsa.GenerateKey(rand.Reader, 2048)
 	ring := identity.NewRSAKeyring("key-1", k1)
 	ts := identity.NewTokenService(um, identity.TokenOptions{
-		Signer: ring, Issuer: "go-identity", Audience: "api",
+		Signer: ring, Issuer: "go-idento", Audience: "api",
 		AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: time.Hour,
 	})
 

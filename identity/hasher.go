@@ -13,8 +13,7 @@ import (
 	"golang.org/x/crypto/pbkdf2"
 )
 
-// PasswordHasher is the abstraction over password hashing, mirroring
-// IPasswordHasher<TUser>.
+// PasswordHasher is the abstraction over password hashing.
 type PasswordHasher interface {
 	// Hash returns the encoded hash for the given plaintext password.
 	Hash(user *User, password string) string
@@ -23,7 +22,8 @@ type PasswordHasher interface {
 	Verify(user *User, encoded, password string) (ok, needsRehash bool)
 }
 
-// PRF identifies the pseudo-random function, matching the .NET enum ordering.
+// PRF identifies the pseudo-random function; the values are part of the encoded
+// hash format.
 type PRF uint32
 
 const (
@@ -32,12 +32,12 @@ const (
 	prfSHA512 PRF = 2
 )
 
-// pbkdf2Hasher implements the ASP.NET Core Identity v3 hash format, so hashes
-// produced here verify under .NET and vice versa:
+// pbkdf2Hasher implements a versioned PBKDF2 hash format. The encoded value is:
 //
 //	{ 0x01, prf (uint32 BE), iterCount (uint32 BE), saltLen (uint32 BE), salt, subkey }
 //
-// base64-encoded for storage.
+// base64-encoded for storage. The leading version byte lets the parameters
+// evolve over time while old hashes keep verifying (and get rehashed on login).
 type pbkdf2Hasher struct {
 	iterations int
 	saltLen    int
@@ -46,7 +46,7 @@ type pbkdf2Hasher struct {
 }
 
 // NewPasswordHasher returns the default hasher: PBKDF2/HMAC-SHA256, 100000
-// iterations, 128-bit salt, 256-bit subkey (the .NET 6+ defaults).
+// iterations, 128-bit salt, 256-bit subkey.
 func NewPasswordHasher() PasswordHasher {
 	return &pbkdf2Hasher{iterations: 100_000, saltLen: 16, subkeyLen: 32, prf: prfSHA256}
 }

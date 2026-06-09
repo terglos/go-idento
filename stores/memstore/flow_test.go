@@ -27,7 +27,7 @@ func newHarness() *harness {
 		users:  um,
 		roles:  identity.NewRoleManager(st.Roles()),
 		signIn: identity.NewSignInManager(um),
-		tokens: identity.NewTokenService(um, identity.DefaultTokenOptions([]byte("unit-signing-key-0000000000000000"), "go-identity", "api")),
+		tokens: identity.NewTokenService(um, identity.DefaultTokenOptions([]byte("unit-signing-key-0000000000000000"), "go-idento", "api")),
 	}
 }
 
@@ -323,7 +323,7 @@ func TestRSARotationUnit(t *testing.T) {
 	k1, _ := rsa.GenerateKey(rand.Reader, 2048)
 	ring := identity.NewRSAKeyring("k1", k1)
 	ts := identity.NewTokenService(um, identity.TokenOptions{
-		Signer: ring, Issuer: "go-identity", Audience: "api",
+		Signer: ring, Issuer: "go-idento", Audience: "api",
 		AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: time.Hour,
 	})
 	u := &identity.User{UserName: "mia", SecurityStamp: "s"}

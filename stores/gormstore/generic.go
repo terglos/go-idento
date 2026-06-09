@@ -10,7 +10,7 @@ import (
 // GenericUserStore is a GORM user store for a custom user type T that embeds
 // identity.User (and therefore satisfies identity.UserModel via Base()). It is
 // what enables the generic UserManagerOf[T] to persist custom columns on the
-// user row — the Go equivalent of subclassing IdentityUser in .NET.
+// user row.
 //
 // Because the embedded *User promotes TableName() ("identity_users"), the custom
 // type maps to the same users table with the extra fields as additional columns.

@@ -18,7 +18,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// Profile is the app-owned extension table. It is NOT part of go-identity; the
+// Profile is the app-owned extension table. It is NOT part of go-idento; the
 // application defines and migrates it alongside the identity tables.
 type Profile struct {
 	UserID   string `gorm:"primaryKey;type:varchar(36)"`
@@ -80,7 +80,7 @@ func TestClaimsAsAttributes(t *testing.T) {
 
 	users := identity.NewUserManager(gormstore.NewUserStore(db), identity.DefaultOptions())
 	tokens := identity.NewTokenService(users,
-		identity.DefaultTokenOptions([]byte("customfields-signing-key-000000!"), "go-identity", "api"))
+		identity.DefaultTokenOptions([]byte("customfields-signing-key-000000!"), "go-idento", "api"))
 
 	u := &identity.User{UserName: "nina"}
 	if err := users.CreateWithPassword(ctx, u, "Abcdef1!"); err != nil {

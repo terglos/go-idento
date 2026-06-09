@@ -12,15 +12,15 @@ import (
 	"github.com/google/uuid"
 )
 
-// Normalizer produces the canonical key used for lookups, mirroring
-// ILookupNormalizer (uppercase invariant by default).
+// Normalizer produces the canonical key used for lookups (uppercase invariant
+// by default).
 type Normalizer interface{ Normalize(s string) string }
 
 type upperNormalizer struct{}
 
 func (upperNormalizer) Normalize(s string) string { return strings.ToUpper(strings.TrimSpace(s)) }
 
-// UserManagerOf is the business-layer API for users, mirroring UserManager<TUser>.
+// UserManagerOf is the business-layer API for users.
 // It is generic over a custom user type T (which must embed [User], satisfying
 // [UserModel] via Base()). Use [UserManager] / [NewUserManager] for the built-in
 // user, or [NewUserManagerOf] for an extended type with custom columns.
@@ -63,7 +63,7 @@ func (m *UserManagerOf[T, PT]) Create(ctx context.Context, u PT) error {
 }
 
 // CreateWithPassword validates the policy, hashes the password and persists the
-// user. Equivalent to UserManager.CreateAsync(user, password).
+// user.
 func (m *UserManagerOf[T, PT]) CreateWithPassword(ctx context.Context, u PT, password string) error {
 	if err := m.ValidatePassword(password); err != nil {
 		return err
@@ -102,7 +102,7 @@ func (m *UserManagerOf[T, PT]) prepareForCreate(ctx context.Context, u PT) error
 	return nil
 }
 
-// ValidatePassword enforces PasswordOptions, mirroring PasswordValidator.
+// ValidatePassword enforces the configured PasswordOptions policy.
 func (m *UserManagerOf[T, PT]) ValidatePassword(pw string) error {
 	o := m.Options.Password
 	if len([]rune(pw)) < o.RequiredLength {
@@ -224,7 +224,7 @@ func (m *UserManagerOf[T, PT]) IsLockedOut(u PT) bool {
 }
 
 // AccessFailed increments the failure counter and locks the account once it
-// reaches MaxFailedAccessAttempts. Mirrors UserManager.AccessFailedAsync.
+// reaches MaxFailedAccessAttempts.
 func (m *UserManagerOf[T, PT]) AccessFailed(ctx context.Context, u PT) error {
 	b := u.Base()
 	b.AccessFailedCount++
