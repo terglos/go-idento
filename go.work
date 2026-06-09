@@ -1,0 +1,8 @@
+go 1.26
+
+use (
+	.
+	./stores/gormstore
+	./stores/pgxstore
+	./stores/pgxsqlc
+)

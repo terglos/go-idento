@@ -42,19 +42,16 @@ auth/                  HTTP layer
   cookie.go            CookieAuth (HttpOnly cookie sessions)
   jwks.go              JWKSHandler (serves a Signer's public keys)
 stores/
-  gormstore/           GORM (Postgres/MySQL/SQLite); generic.go = NewUserStoreOf[T]
-  pgxstore/            raw pgx (PostgreSQL), hand-written SQL + embedded schema.sql
-  pgxsqlc/             sqlc-generated pgx store (sqlc.yaml, schema.sql, query.sql,
-                       internal/sqlcgen/*; adapter in store.go). Regenerate: `sqlc generate`.
-  memstore/            in-memory store (tests/prototyping)
-examples/
-  httpserver/          minimal SQLite server (register/login/me/admin)
-  customfields/        Options A (extension table) & B (claims) — no refactor
-  genericuser/         Option D: AppUser with custom columns via UserManagerOf[T]
-demo/
-  postgres/            full PostgreSQL demo (docker-compose + 2FA + refresh)
-  totp/                helper: print current TOTP code for a shared key
+  memstore/            in-memory store (tests/prototyping) — part of the CORE module
+  gormstore/           [own module] GORM (Postgres/MySQL/SQLite); generic.go = NewUserStoreOf[T]
+    examples/          httpserver (SQLite), customfields (A/B), genericuser (D)
+  pgxstore/            [own module] raw pgx (PostgreSQL) + example/postgres demo
+  pgxsqlc/             [own module] sqlc-generated pgx store; regenerate: `sqlc generate`
+demo/totp/             TOTP code helper (core only)
 migrations/            versioned SQL history (baseline); atlas.hcl at repo root
+
+Multi-module repo: the root module is dependency-light (jwt/uuid/x-crypto);
+gorm/pgx live in the per-store submodules. go.work ties them for local dev.
 tools/atlasloader/     Atlas GORM provider loader (build tag `atlas`)
 docs/                  architecture, getting-started, design records
 ```
@@ -94,7 +91,7 @@ GOIDENTITY_PG_DSN="postgres://postgres:123@localhost:5432/identity_test?sslmode=
   go test ./stores/pgxstore/ -run TestPgxIntegration
 ```
 
-Run the Postgres demo: see [demo/postgres/README.md](demo/postgres/README.md).
+Run the Postgres demo: see [stores/pgxstore/example/postgres/README.md](stores/pgxstore/example/postgres/README.md).
 Local dev DB credentials and DSN are in the assistant memory (`local-postgres`).
 
 > `-race` requires CGO; this dev machine has CGO disabled, so race tests don't run here.

@@ -5,4 +5,5 @@
 - [Extending the user & migrations](design/extending-user-and-migrations.md) — the four extension options and the migration strategy (decision record).
 
 See also the top-level [README](../README.md), [CLAUDE.md](../CLAUDE.md) (contributor/agent guide),
-and runnable [examples](../examples) / [demos](../demo).
+and runnable examples under [stores/gormstore/examples](../stores/gormstore/examples) and
+[stores/pgxstore/example](../stores/pgxstore/example).

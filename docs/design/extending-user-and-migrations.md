@@ -3,9 +3,9 @@
 > Status: analysis / decision record. Date: 2026-06-08.
 >
 > **Update (implemented):** all four extension options now ship — Option C
-> (`Attributes` column), Options A/B (see [examples/customfields](../../examples/customfields)),
+> (`Attributes` column), Options A/B (see [examples/customfields](../../stores/gormstore/examples/customfields)),
 > and **Option D generics** as `UserManagerOf[T]` + `gormstore.NewUserStoreOf[T]`
-> with back-compat aliases (see [examples/genericuser](../../examples/genericuser)).
+> with back-compat aliases (see [examples/genericuser](../../stores/gormstore/examples/genericuser)).
 > Migrations: the `identity/migrations` embed package + `atlas.hcl` are in place.
 
 Two related questions:

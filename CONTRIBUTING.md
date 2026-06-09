@@ -2,16 +2,28 @@
 
 Thanks for your interest in improving go-idento!
 
+## Modules
+
+This is a multi-module repo: the dependency-light core (`.`) plus one module per
+heavy store (`stores/gormstore`, `stores/pgxstore`, `stores/pgxsqlc`). A `go.work`
+ties them together for local development. Build/test each module from its own
+directory.
+
 ## Development
 
 ```bash
-go build ./...
-go test ./...          # no database required (uses SQLite/in-memory)
-go vet ./...
+# core (no database needed)
+go build ./... && go vet ./... && go test ./...
+
+# each store module
+for m in stores/gormstore stores/pgxstore stores/pgxsqlc; do
+  (cd "$m" && go build ./... && go test ./...)
+done
+
 gofmt -l .             # must be empty (excluding generated code)
 ```
 
-Optional, matching CI:
+Optional, matching CI (run per module):
 
 ```bash
 staticcheck $(go list ./... | grep -v '/internal/sqlcgen')
@@ -22,10 +34,8 @@ golangci-lint run
 ### Postgres integration tests (opt-in)
 
 ```bash
-GOIDENTITY_PG_DSN="postgres://user:pass@localhost:5432/idento_test?sslmode=disable" \
-  go test ./stores/pgxstore/
-GOIDENTITY_PG_SQLC_DSN="postgres://user:pass@localhost:5432/idento_sqlc_test?sslmode=disable" \
-  go test ./stores/pgxsqlc/
+cd stores/pgxstore && GOIDENTITY_PG_DSN="postgres://user:pass@localhost:5432/idento_test?sslmode=disable" go test ./...
+cd stores/pgxsqlc && GOIDENTITY_PG_SQLC_DSN="postgres://user:pass@localhost:5432/idento_sqlc_test?sslmode=disable" go test ./...
 ```
 
 ### Regenerating sqlc code

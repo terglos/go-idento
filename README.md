@@ -61,27 +61,33 @@ if res.Succeeded {
 Run the demo server:
 
 ```
-go run ./examples/httpserver
+cd stores/gormstore && go run ./examples/httpserver
 ```
+
+## Modules
+
+The repo is split so the **core stays dependency-light**: importing
+`github.com/terglos/go-idento` pulls only `golang-jwt`, `google/uuid` and
+`golang.org/x/crypto` — no ORM or DB driver. Each heavy store is its own module
+you opt into:
+
+| Module | Import | Extra deps |
+|---|---|---|
+| core | `github.com/terglos/go-idento` (+`/auth`, `/stores/memstore`) | jwt, uuid, x/crypto |
+| GORM store | `github.com/terglos/go-idento/stores/gormstore` | gorm, drivers |
+| pgx store | `github.com/terglos/go-idento/stores/pgxstore` | pgx |
+| sqlc store | `github.com/terglos/go-idento/stores/pgxsqlc` | pgx |
 
 ## Layout
 
 ```
-identity/          core: entities, managers, hasher, options, JWT
-  entities.go      User/Role/Claim and the identity tables
-  user_manager.go  UserManager (create, password, roles, claims, lockout)
-  role_manager.go  RoleManager
-  signin_manager.go SignInManager (+ SignInResult)
-  hasher.go        PBKDF2 password hasher (versioned format)
-  token_service.go JWT access/refresh issuance + validation
-  store.go         UserStore / RoleStore interfaces
-auth/              HTTP middleware: Bearer + cookie, RequireAuth/RequireRole/RequirePolicy
-stores/gormstore/  GORM implementation (Postgres / MySQL / SQLite)
-stores/pgxstore/   raw pgx implementation (PostgreSQL, hand-written SQL)
-stores/pgxsqlc/    sqlc-generated pgx implementation (PostgreSQL)
-stores/memstore/   in-memory implementation (tests / prototyping)
-examples/httpserver minimal register/login/me/admin server (SQLite)
-demo/postgres/     full PostgreSQL demo (docker-compose + 2FA + refresh)
+identity/          core: entities, managers, hasher, options, JWT, signer/JWKS
+auth/              HTTP middleware: Bearer + cookie, RequireAuth/RequireRole/RequirePolicy, JWKS
+stores/memstore/   in-memory implementation (tests / prototyping) — in the core module
+stores/gormstore/  [module] GORM (Postgres / MySQL / SQLite) + examples
+stores/pgxstore/   [module] raw pgx (PostgreSQL) + demo
+stores/pgxsqlc/    [module] sqlc-generated pgx (PostgreSQL)
+demo/totp/         TOTP code helper (core only)
 ```
 
 ## Extending the user
@@ -108,8 +114,8 @@ u.SetAttribute("tenant", "acme")           // persisted in the attributes column
 // Option B — claims (flow into the JWT). Option A — your own 1:1 extension table.
 ```
 
-See [examples/genericuser](examples/genericuser) (Option D) and
-[examples/customfields](examples/customfields) (Options A & B).
+See [stores/gormstore/examples/genericuser](stores/gormstore/examples/genericuser) (Option D) and
+[stores/gormstore/examples/customfields](stores/gormstore/examples/customfields) (Options A & B).
 
 ## Migrations
 
@@ -124,11 +130,11 @@ EF `add-migration` loop. goose / golang-migrate can run the same SQL.
 
 ## Demos
 
-- [`demo/postgres`](demo/postgres) — full flow against a real PostgreSQL via the
-  raw `pgx` store: `docker compose up -d && go run .` then follow its README
-  (register, login, JWT + cookie, refresh, role-gated route, TOTP 2FA).
-- [`examples/httpserver`](examples/httpserver) — minimal zero-setup server on
-  SQLite: `go run ./examples/httpserver`.
+- [`stores/pgxstore/example/postgres`](stores/pgxstore/example/postgres) — full flow
+  against a real PostgreSQL via the raw `pgx` store: `docker compose up -d && go run .`
+  then follow its README (register, login, JWT + cookie, refresh, role-gated route, TOTP 2FA).
+- [`stores/gormstore/examples/httpserver`](stores/gormstore/examples/httpserver) — minimal
+  zero-setup server on SQLite: `cd stores/gormstore && go run ./examples/httpserver`.
 
 ## Features
 

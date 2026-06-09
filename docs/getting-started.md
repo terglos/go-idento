@@ -136,5 +136,5 @@ See [migrations/README.md](../migrations/README.md).
 
 ## Next steps
 
-- Full PostgreSQL demo: [demo/postgres](../demo/postgres).
+- Full PostgreSQL demo: [stores/pgxstore/example/postgres](../stores/pgxstore/example/postgres).
 - Architecture & security details: [architecture.md](architecture.md).
