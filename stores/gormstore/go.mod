@@ -6,7 +6,7 @@ toolchain go1.26.4
 
 require (
 	github.com/glebarez/sqlite v1.11.0
-	github.com/terglos/go-idento v0.3.5
+	github.com/terglos/go-idento v0.4.0
 	gorm.io/gorm v1.31.1
 )
 
