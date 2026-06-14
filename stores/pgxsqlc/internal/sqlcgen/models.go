@@ -40,6 +40,7 @@ type IdentityUser struct {
 	LockoutEnabled       bool
 	AccessFailedCount    int32
 	Attributes           json.RawMessage
+	IsAnonymous          bool
 	CreatedAt            time.Time
 	UpdatedAt            time.Time
 }

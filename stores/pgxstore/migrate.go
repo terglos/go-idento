@@ -59,12 +59,14 @@ func buildDDL(n identity.Naming) string {
 	lockout_enabled        boolean      NOT NULL DEFAULT false,
 	access_failed_count    integer      NOT NULL DEFAULT 0,
 	attributes             jsonb        NOT NULL DEFAULT '{}'::jsonb,
+	is_anonymous           boolean      NOT NULL DEFAULT false,
 	created_at             timestamptz  NOT NULL DEFAULT now(),
 	updated_at             timestamptz  NOT NULL DEFAULT now()
 );
 CREATE UNIQUE INDEX IF NOT EXISTS %s ON %s (normalized_user_name);
 CREATE INDEX IF NOT EXISTS %s ON %s (normalized_email);
-`, U, ix("ux", n.Tables.Users, "uname"), U, ix("ix", n.Tables.Users, "email"), U)
+CREATE INDEX IF NOT EXISTS %s ON %s (created_at) WHERE is_anonymous;
+`, U, ix("ux", n.Tables.Users, "uname"), U, ix("ix", n.Tables.Users, "email"), U, ix("ix", n.Tables.Users, "guest"), U)
 
 	fmt.Fprintf(&b, `CREATE TABLE IF NOT EXISTS %s (
 	id                varchar(36) PRIMARY KEY,

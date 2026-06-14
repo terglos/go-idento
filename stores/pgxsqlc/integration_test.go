@@ -108,6 +108,37 @@ func TestSqlcIntegration(t *testing.T) {
 		t.Fatalf("list users: err=%v total=%d page=%d", err, total, len(page))
 	}
 
+	// Guest identity through the sqlc store: create, convert, purge (FK cascade).
+	guest, err := um.CreateAnonymous(ctx)
+	if err != nil {
+		t.Fatalf("CreateAnonymous: %v", err)
+	}
+	if !guest.IsAnonymous {
+		t.Fatal("guest should be anonymous")
+	}
+	gid := guest.ID
+	if err := um.ConvertToRegistered(ctx, guest, "sqlc_promoted", "promoted@x.com", "Abcdef1!"); err != nil {
+		t.Fatalf("ConvertToRegistered: %v", err)
+	}
+	if reload, _ := um.FindByID(ctx, gid); reload == nil || reload.IsAnonymous || reload.ID != gid {
+		t.Fatalf("conversion must preserve id and clear anonymous: %+v", reload)
+	}
+	stale, _ := um.CreateAnonymous(ctx)
+	if _, err := pool.Exec(ctx, `UPDATE identity_users SET created_at = now() - interval '48 hours' WHERE id=$1`, stale.ID); err != nil {
+		t.Fatalf("age the guest: %v", err)
+	}
+	fresh, _ := um.CreateAnonymous(ctx)
+	purged, err := um.PurgeAnonymousUsers(ctx, time.Now().Add(-24*time.Hour))
+	if err != nil || purged != 1 {
+		t.Fatalf("PurgeAnonymousUsers: purged=%d err=%v", purged, err)
+	}
+	if got, _ := um.FindByID(ctx, stale.ID); got != nil {
+		t.Fatal("stale guest should be purged")
+	}
+	if got, _ := um.FindByID(ctx, fresh.ID); got == nil {
+		t.Fatal("fresh guest should remain")
+	}
+
 	// Store behavioral contract through the sqlc store.
 	if err := um.AddToRole(ctx, signed, "ghost"); err != identity.ErrRoleNotFound {
 		t.Fatalf("AddToRole(missing role) must be ErrRoleNotFound, got %v", err)

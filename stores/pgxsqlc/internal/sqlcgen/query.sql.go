@@ -118,9 +118,9 @@ INSERT INTO identity_users (
     id, user_name, normalized_user_name, email, normalized_email, email_confirmed,
     password_hash, security_stamp, concurrency_stamp, phone_number,
     phone_number_confirmed, two_factor_enabled, lockout_end, lockout_enabled,
-    access_failed_count, attributes
+    access_failed_count, attributes, is_anonymous
 ) VALUES (
-    $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16
+    $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17
 )
 `
 
@@ -141,6 +141,7 @@ type CreateUserParams struct {
 	LockoutEnabled       bool
 	AccessFailedCount    int32
 	Attributes           json.RawMessage
+	IsAnonymous          bool
 }
 
 func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) error {
@@ -161,6 +162,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) error {
 		arg.LockoutEnabled,
 		arg.AccessFailedCount,
 		arg.Attributes,
+		arg.IsAnonymous,
 	)
 	return err
 }
@@ -301,7 +303,7 @@ func (q *Queries) GetRoleIDByName(ctx context.Context, normalizedName string) (s
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, user_name, normalized_user_name, email, normalized_email, email_confirmed, password_hash, security_stamp, concurrency_stamp, phone_number, phone_number_confirmed, two_factor_enabled, lockout_end, lockout_enabled, access_failed_count, attributes, created_at, updated_at FROM identity_users WHERE normalized_email=$1
+SELECT id, user_name, normalized_user_name, email, normalized_email, email_confirmed, password_hash, security_stamp, concurrency_stamp, phone_number, phone_number_confirmed, two_factor_enabled, lockout_end, lockout_enabled, access_failed_count, attributes, is_anonymous, created_at, updated_at FROM identity_users WHERE normalized_email=$1
 `
 
 func (q *Queries) GetUserByEmail(ctx context.Context, normalizedEmail string) (IdentityUser, error) {
@@ -324,6 +326,7 @@ func (q *Queries) GetUserByEmail(ctx context.Context, normalizedEmail string) (I
 		&i.LockoutEnabled,
 		&i.AccessFailedCount,
 		&i.Attributes,
+		&i.IsAnonymous,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -331,7 +334,7 @@ func (q *Queries) GetUserByEmail(ctx context.Context, normalizedEmail string) (I
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, user_name, normalized_user_name, email, normalized_email, email_confirmed, password_hash, security_stamp, concurrency_stamp, phone_number, phone_number_confirmed, two_factor_enabled, lockout_end, lockout_enabled, access_failed_count, attributes, created_at, updated_at FROM identity_users WHERE id=$1
+SELECT id, user_name, normalized_user_name, email, normalized_email, email_confirmed, password_hash, security_stamp, concurrency_stamp, phone_number, phone_number_confirmed, two_factor_enabled, lockout_end, lockout_enabled, access_failed_count, attributes, is_anonymous, created_at, updated_at FROM identity_users WHERE id=$1
 `
 
 func (q *Queries) GetUserByID(ctx context.Context, id string) (IdentityUser, error) {
@@ -354,6 +357,7 @@ func (q *Queries) GetUserByID(ctx context.Context, id string) (IdentityUser, err
 		&i.LockoutEnabled,
 		&i.AccessFailedCount,
 		&i.Attributes,
+		&i.IsAnonymous,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -361,7 +365,7 @@ func (q *Queries) GetUserByID(ctx context.Context, id string) (IdentityUser, err
 }
 
 const getUserByName = `-- name: GetUserByName :one
-SELECT id, user_name, normalized_user_name, email, normalized_email, email_confirmed, password_hash, security_stamp, concurrency_stamp, phone_number, phone_number_confirmed, two_factor_enabled, lockout_end, lockout_enabled, access_failed_count, attributes, created_at, updated_at FROM identity_users WHERE normalized_user_name=$1
+SELECT id, user_name, normalized_user_name, email, normalized_email, email_confirmed, password_hash, security_stamp, concurrency_stamp, phone_number, phone_number_confirmed, two_factor_enabled, lockout_end, lockout_enabled, access_failed_count, attributes, is_anonymous, created_at, updated_at FROM identity_users WHERE normalized_user_name=$1
 `
 
 func (q *Queries) GetUserByName(ctx context.Context, normalizedUserName string) (IdentityUser, error) {
@@ -384,6 +388,7 @@ func (q *Queries) GetUserByName(ctx context.Context, normalizedUserName string) 
 		&i.LockoutEnabled,
 		&i.AccessFailedCount,
 		&i.Attributes,
+		&i.IsAnonymous,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -511,7 +516,7 @@ func (q *Queries) GetUserToken(ctx context.Context, arg GetUserTokenParams) (str
 }
 
 const getUsersForClaim = `-- name: GetUsersForClaim :many
-SELECT id, user_name, normalized_user_name, email, normalized_email, email_confirmed, password_hash, security_stamp, concurrency_stamp, phone_number, phone_number_confirmed, two_factor_enabled, lockout_end, lockout_enabled, access_failed_count, attributes, created_at, updated_at FROM identity_users
+SELECT id, user_name, normalized_user_name, email, normalized_email, email_confirmed, password_hash, security_stamp, concurrency_stamp, phone_number, phone_number_confirmed, two_factor_enabled, lockout_end, lockout_enabled, access_failed_count, attributes, is_anonymous, created_at, updated_at FROM identity_users
 WHERE id IN (
     SELECT user_id FROM identity_user_claims WHERE claim_type = $1 AND claim_value = $2
 )
@@ -549,6 +554,7 @@ func (q *Queries) GetUsersForClaim(ctx context.Context, arg GetUsersForClaimPara
 			&i.LockoutEnabled,
 			&i.AccessFailedCount,
 			&i.Attributes,
+			&i.IsAnonymous,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -563,7 +569,7 @@ func (q *Queries) GetUsersForClaim(ctx context.Context, arg GetUsersForClaimPara
 }
 
 const getUsersInRole = `-- name: GetUsersInRole :many
-SELECT id, user_name, normalized_user_name, email, normalized_email, email_confirmed, password_hash, security_stamp, concurrency_stamp, phone_number, phone_number_confirmed, two_factor_enabled, lockout_end, lockout_enabled, access_failed_count, attributes, created_at, updated_at FROM identity_users
+SELECT id, user_name, normalized_user_name, email, normalized_email, email_confirmed, password_hash, security_stamp, concurrency_stamp, phone_number, phone_number_confirmed, two_factor_enabled, lockout_end, lockout_enabled, access_failed_count, attributes, is_anonymous, created_at, updated_at FROM identity_users
 WHERE id IN (
     SELECT user_id FROM identity_user_roles
     WHERE role_id = (SELECT id FROM identity_roles WHERE normalized_name = $1)
@@ -597,6 +603,7 @@ func (q *Queries) GetUsersInRole(ctx context.Context, normalizedName string) ([]
 			&i.LockoutEnabled,
 			&i.AccessFailedCount,
 			&i.Attributes,
+			&i.IsAnonymous,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -631,7 +638,7 @@ func (q *Queries) IsUserInRole(ctx context.Context, arg IsUserInRoleParams) (boo
 }
 
 const listUsers = `-- name: ListUsers :many
-SELECT id, user_name, normalized_user_name, email, normalized_email, email_confirmed, password_hash, security_stamp, concurrency_stamp, phone_number, phone_number_confirmed, two_factor_enabled, lockout_end, lockout_enabled, access_failed_count, attributes, created_at, updated_at FROM identity_users
+SELECT id, user_name, normalized_user_name, email, normalized_email, email_confirmed, password_hash, security_stamp, concurrency_stamp, phone_number, phone_number_confirmed, two_factor_enabled, lockout_end, lockout_enabled, access_failed_count, attributes, is_anonymous, created_at, updated_at FROM identity_users
 WHERE $1::text = '' OR normalized_user_name LIKE '%' || $1 || '%'
    OR normalized_email LIKE '%' || $1 || '%'
 ORDER BY id
@@ -670,6 +677,7 @@ func (q *Queries) ListUsers(ctx context.Context, arg ListUsersParams) ([]Identit
 			&i.LockoutEnabled,
 			&i.AccessFailedCount,
 			&i.Attributes,
+			&i.IsAnonymous,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -681,6 +689,18 @@ func (q *Queries) ListUsers(ctx context.Context, arg ListUsersParams) ([]Identit
 		return nil, err
 	}
 	return items, nil
+}
+
+const purgeAnonymousUsers = `-- name: PurgeAnonymousUsers :execrows
+DELETE FROM identity_users WHERE is_anonymous AND created_at < $1
+`
+
+func (q *Queries) PurgeAnonymousUsers(ctx context.Context, createdAt time.Time) (int64, error) {
+	result, err := q.db.Exec(ctx, purgeAnonymousUsers, createdAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const removeUserFromRole = `-- name: RemoveUserFromRole :exec
@@ -759,8 +779,9 @@ UPDATE identity_users SET
     concurrency_stamp = $8, phone_number = $9,
     phone_number_confirmed = $10, two_factor_enabled = $11,
     lockout_end = $12, lockout_enabled = $13,
-    access_failed_count = $14, attributes = $15, updated_at = now()
-WHERE id = $16 AND concurrency_stamp = $17
+    access_failed_count = $14, attributes = $15,
+    is_anonymous = $16, updated_at = now()
+WHERE id = $17 AND concurrency_stamp = $18
 `
 
 type UpdateUserParams struct {
@@ -779,6 +800,7 @@ type UpdateUserParams struct {
 	LockoutEnabled       bool
 	AccessFailedCount    int32
 	Attributes           json.RawMessage
+	IsAnonymous          bool
 	ID                   string
 	OldConcurrencyStamp  string
 }
@@ -800,6 +822,7 @@ func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (int64, 
 		arg.LockoutEnabled,
 		arg.AccessFailedCount,
 		arg.Attributes,
+		arg.IsAnonymous,
 		arg.ID,
 		arg.OldConcurrencyStamp,
 	)

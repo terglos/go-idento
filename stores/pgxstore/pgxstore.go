@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -62,9 +63,10 @@ type RoleStore struct {
 
 // Compile-time interface conformance.
 var (
-	_ identity.DefaultUserStore                          = (*UserStore)(nil)
-	_ identity.RoleStore                                 = (*RoleStore)(nil)
-	_ identity.UserLister[identity.User, *identity.User] = (*UserStore)(nil)
+	_ identity.DefaultUserStore                               = (*UserStore)(nil)
+	_ identity.RoleStore                                      = (*RoleStore)(nil)
+	_ identity.UserLister[identity.User, *identity.User]      = (*UserStore)(nil)
+	_ identity.AnonymousPurger[identity.User, *identity.User] = (*UserStore)(nil)
 )
 
 // NewUserStore builds a user store; pass options to customize schema/table names.
@@ -87,14 +89,14 @@ func mapNotFound(err error) error {
 const userCols = `id, user_name, normalized_user_name, email, normalized_email,
 	email_confirmed, password_hash, security_stamp, concurrency_stamp,
 	phone_number, phone_number_confirmed, two_factor_enabled, lockout_end,
-	lockout_enabled, access_failed_count, attributes, created_at, updated_at`
+	lockout_enabled, access_failed_count, attributes, is_anonymous, created_at, updated_at`
 
 // queries holds every SQL statement, pre-built from the resolved Naming so the
 // table identifiers (and joins) are always consistent.
 type queries struct {
 	createUser, updateUser, userExists, deleteUser string
 	findUserByID, findUserByName, findUserByEmail  string
-	countUsers, listUsers                          string
+	countUsers, listUsers, purgeAnonymous          string
 	addToRole, removeFromRole, getRoles, isInRole  string
 	roleExistsByName                               string
 	usersInRole, usersForClaim                     string
@@ -116,13 +118,14 @@ func buildQueries(n identity.Naming) queries {
 	UT := n.Qualify(n.Tables.UserTokens)
 	const where = `($1 = '' OR normalized_user_name LIKE '%'||$1||'%' OR normalized_email LIKE '%'||$1||'%')`
 	return queries{
-		createUser: fmt.Sprintf(`INSERT INTO %s (%s) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16, now(), now())`, U, userCols),
+		createUser: fmt.Sprintf(`INSERT INTO %s (%s) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17, now(), now())`, U, userCols),
 		updateUser: fmt.Sprintf(`UPDATE %s SET
 			user_name=$2, normalized_user_name=$3, email=$4, normalized_email=$5,
 			email_confirmed=$6, password_hash=$7, security_stamp=$8, concurrency_stamp=$9,
 			phone_number=$10, phone_number_confirmed=$11, two_factor_enabled=$12,
-			lockout_end=$13, lockout_enabled=$14, access_failed_count=$15, attributes=$16, updated_at=now()
-			WHERE id=$1 AND concurrency_stamp=$17`, U),
+			lockout_end=$13, lockout_enabled=$14, access_failed_count=$15, attributes=$16,
+			is_anonymous=$17, updated_at=now()
+			WHERE id=$1 AND concurrency_stamp=$18`, U),
 		userExists:       fmt.Sprintf(`SELECT EXISTS(SELECT 1 FROM %s WHERE id=$1)`, U),
 		deleteUser:       fmt.Sprintf(`DELETE FROM %s WHERE id=$1`, U),
 		findUserByID:     fmt.Sprintf(`SELECT %s FROM %s WHERE id=$1`, userCols, U),
@@ -130,6 +133,7 @@ func buildQueries(n identity.Naming) queries {
 		findUserByEmail:  fmt.Sprintf(`SELECT %s FROM %s WHERE normalized_email=$1`, userCols, U),
 		countUsers:       fmt.Sprintf(`SELECT count(*) FROM %s WHERE %s`, U, where),
 		listUsers:        fmt.Sprintf(`SELECT %s FROM %s WHERE %s ORDER BY id LIMIT $2 OFFSET $3`, userCols, U, where),
+		purgeAnonymous:   fmt.Sprintf(`DELETE FROM %s WHERE is_anonymous AND created_at < $1`, U),
 		addToRole:        fmt.Sprintf(`INSERT INTO %s (user_id, role_id) SELECT $1, id FROM %s WHERE normalized_name=$2 ON CONFLICT (user_id, role_id) DO NOTHING`, UR, R),
 		removeFromRole:   fmt.Sprintf(`DELETE FROM %s WHERE user_id=$1 AND role_id=(SELECT id FROM %s WHERE normalized_name=$2)`, UR, R),
 		getRoles:         fmt.Sprintf(`SELECT r.name FROM %s r JOIN %s ur ON ur.role_id=r.id WHERE ur.user_id=$1`, R, UR),
@@ -165,7 +169,7 @@ func scanUser(row pgx.Row) (*identity.User, error) {
 	err := row.Scan(&u.ID, &u.UserName, &u.NormalizedUserName, &u.Email, &u.NormalizedEmail,
 		&u.EmailConfirmed, &u.PasswordHash, &u.SecurityStamp, &u.ConcurrencyStamp,
 		&u.PhoneNumber, &u.PhoneNumberConfirmed, &u.TwoFactorEnabled, &u.LockoutEnd,
-		&u.LockoutEnabled, &u.AccessFailedCount, &attrs, &u.CreatedAt, &u.UpdatedAt)
+		&u.LockoutEnabled, &u.AccessFailedCount, &attrs, &u.IsAnonymous, &u.CreatedAt, &u.UpdatedAt)
 	if err != nil {
 		return nil, mapNotFound(err)
 	}
@@ -195,7 +199,7 @@ func (s *UserStore) Create(ctx context.Context, u *identity.User) error {
 		u.ID, u.UserName, u.NormalizedUserName, u.Email, u.NormalizedEmail,
 		u.EmailConfirmed, u.PasswordHash, u.SecurityStamp, u.ConcurrencyStamp,
 		u.PhoneNumber, u.PhoneNumberConfirmed, u.TwoFactorEnabled, u.LockoutEnd,
-		u.LockoutEnabled, u.AccessFailedCount, attrs)
+		u.LockoutEnabled, u.AccessFailedCount, attrs, u.IsAnonymous)
 	return err
 }
 
@@ -210,7 +214,7 @@ func (s *UserStore) Update(ctx context.Context, u *identity.User) error {
 		u.ID, u.UserName, u.NormalizedUserName, u.Email, u.NormalizedEmail,
 		u.EmailConfirmed, u.PasswordHash, u.SecurityStamp, newStamp,
 		u.PhoneNumber, u.PhoneNumberConfirmed, u.TwoFactorEnabled, u.LockoutEnd,
-		u.LockoutEnabled, u.AccessFailedCount, attrs, old)
+		u.LockoutEnabled, u.AccessFailedCount, attrs, u.IsAnonymous, old)
 	if err != nil {
 		return err
 	}
@@ -223,6 +227,16 @@ func (s *UserStore) Update(ctx context.Context, u *identity.User) error {
 	}
 	u.ConcurrencyStamp = newStamp
 	return nil
+}
+
+// PurgeAnonymousUsers implements identity.AnonymousPurger. Satellite rows go via
+// the ON DELETE CASCADE FKs.
+func (s *UserStore) PurgeAnonymousUsers(ctx context.Context, createdBefore time.Time) (int64, error) {
+	tag, err := s.db.Exec(ctx, s.q.purgeAnonymous, createdBefore)
+	if err != nil {
+		return 0, err
+	}
+	return tag.RowsAffected(), nil
 }
 
 func (s *UserStore) Delete(ctx context.Context, u *identity.User) error {

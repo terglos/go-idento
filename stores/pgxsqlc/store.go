@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -26,9 +27,10 @@ type UserStore struct {
 type RoleStore struct{ q *gen.Queries }
 
 var (
-	_ identity.DefaultUserStore                          = (*UserStore)(nil)
-	_ identity.RoleStore                                 = (*RoleStore)(nil)
-	_ identity.UserLister[identity.User, *identity.User] = (*UserStore)(nil)
+	_ identity.DefaultUserStore                               = (*UserStore)(nil)
+	_ identity.RoleStore                                      = (*RoleStore)(nil)
+	_ identity.UserLister[identity.User, *identity.User]      = (*UserStore)(nil)
+	_ identity.AnonymousPurger[identity.User, *identity.User] = (*UserStore)(nil)
 )
 
 func NewUserStore(db *pgxpool.Pool) *UserStore { return &UserStore{db: db, q: gen.New(db)} }
@@ -69,6 +71,7 @@ func toUser(r gen.IdentityUser) *identity.User {
 		LockoutEnd:           r.LockoutEnd,
 		LockoutEnabled:       r.LockoutEnabled,
 		AccessFailedCount:    int(r.AccessFailedCount),
+		IsAnonymous:          r.IsAnonymous,
 		CreatedAt:            r.CreatedAt,
 		UpdatedAt:            r.UpdatedAt,
 	}
@@ -88,6 +91,7 @@ func (s *UserStore) Create(ctx context.Context, u *identity.User) error {
 		PhoneNumber: u.PhoneNumber, PhoneNumberConfirmed: u.PhoneNumberConfirmed,
 		TwoFactorEnabled: u.TwoFactorEnabled, LockoutEnd: u.LockoutEnd, LockoutEnabled: u.LockoutEnabled,
 		AccessFailedCount: int32(u.AccessFailedCount), Attributes: attrsToJSON(u.Attributes),
+		IsAnonymous: u.IsAnonymous,
 	})
 }
 
@@ -101,6 +105,7 @@ func (s *UserStore) Update(ctx context.Context, u *identity.User) error {
 		PhoneNumber: u.PhoneNumber, PhoneNumberConfirmed: u.PhoneNumberConfirmed,
 		TwoFactorEnabled: u.TwoFactorEnabled, LockoutEnd: u.LockoutEnd, LockoutEnabled: u.LockoutEnabled,
 		AccessFailedCount: int32(u.AccessFailedCount), Attributes: attrsToJSON(u.Attributes),
+		IsAnonymous: u.IsAnonymous,
 	})
 	if err != nil {
 		return err
@@ -113,6 +118,12 @@ func (s *UserStore) Update(ctx context.Context, u *identity.User) error {
 	}
 	u.ConcurrencyStamp = newStamp
 	return nil
+}
+
+// PurgeAnonymousUsers implements identity.AnonymousPurger. Satellite rows go via
+// the ON DELETE CASCADE FKs.
+func (s *UserStore) PurgeAnonymousUsers(ctx context.Context, createdBefore time.Time) (int64, error) {
+	return s.q.PurgeAnonymousUsers(ctx, createdBefore)
 }
 
 func (s *UserStore) Delete(ctx context.Context, u *identity.User) error {

@@ -18,11 +18,13 @@ CREATE TABLE IF NOT EXISTS identity_users (
     lockout_enabled        boolean      NOT NULL DEFAULT false,
     access_failed_count    integer      NOT NULL DEFAULT 0,
     attributes             jsonb        NOT NULL DEFAULT '{}'::jsonb,
+    is_anonymous           boolean      NOT NULL DEFAULT false,
     created_at             timestamptz  NOT NULL DEFAULT now(),
     updated_at             timestamptz  NOT NULL DEFAULT now()
 );
 CREATE UNIQUE INDEX IF NOT EXISTS ux_identity_users_uname ON identity_users (normalized_user_name);
 CREATE INDEX IF NOT EXISTS ix_identity_users_email ON identity_users (normalized_email);
+CREATE INDEX IF NOT EXISTS ix_identity_users_guest ON identity_users (created_at) WHERE is_anonymous;
 
 CREATE TABLE IF NOT EXISTS identity_roles (
     id                varchar(36) PRIMARY KEY,

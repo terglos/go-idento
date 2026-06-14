@@ -4,6 +4,32 @@ Notable changes per release. Versions follow [SemVer](https://semver.org). This
 is a multi-module repo; all modules (`.`, `stores/gormstore`, `stores/pgxstore`,
 `stores/pgxsqlc`) share the same version tag.
 
+## v0.4.0
+
+First-class guest (anonymous) identity — from production feedback that
+synthesizing throwaway users left orphan rows with no cleanup.
+
+### Added
+- **`User.IsAnonymous`** column (indexed) marking a guest account.
+- **`UserManager.CreateAnonymous(ctx)`** — creates a credential-less guest with a
+  generated unique name; issue a JWT for it like any user.
+- **`UserManager.ConvertToRegistered(ctx, u, userName, email, password)`** —
+  promotes a guest to a full account **in place, preserving the user ID**, so
+  roles/claims/data keyed on it carry over. Returns `ErrNotAnonymous` otherwise.
+- **`UserManager.PurgeAnonymousUsers(ctx, olderThan)`** — GC sweep that
+  bulk-deletes stale guests and cascades their satellite rows; returns the count.
+  Backed by the optional `AnonymousPurger` store capability (`ErrPurgeNotSupported`
+  if a store doesn't implement it), available on all four bundled stores.
+- `UserManager.IsAnonymous(u)` helper.
+
+### Schema
+- New `is_anonymous` column + partial GC index (`… (created_at) WHERE
+  is_anonymous`) in the pgx stores' `Migrate`, the canonical
+  `identity/migrations/postgres.sql`, and a versioned migration
+  (`migrations/20260609000002_guest_identity.sql`). Additive and
+  backward-compatible (existing rows default to false); GORM `AutoMigrate` adds
+  the column automatically.
+
 ## v0.3.5
 
 Toolchain + robustness pass (fifth double-check; signers/middleware re-read,

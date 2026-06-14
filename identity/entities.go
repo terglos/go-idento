@@ -38,6 +38,12 @@ type User struct {
 	LockoutEnabled    bool       `json:"lockoutEnabled"`
 	AccessFailedCount int        `json:"accessFailedCount"`
 
+	// IsAnonymous marks a guest user created without credentials via
+	// CreateAnonymous. Promote it to a full account with ConvertToRegistered
+	// (preserving the ID), or sweep stale guests with PurgeAnonymousUsers. The
+	// column is indexed to make the GC sweep cheap.
+	IsAnonymous bool `gorm:"index" json:"isAnonymous"`
+
 	// Attributes is an optional bag of custom key/value data persisted as JSON
 	// (Option C in docs/design/extending-user-and-migrations.md). Use it for
 	// flexible, schema-less metadata; for first-class typed columns prefer an

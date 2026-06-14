@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/terglos/go-idento/identity"
 	"gorm.io/gorm"
@@ -78,6 +79,23 @@ func (t tables) deleteUserCascade(db *gorm.DB, userID string) error {
 	})
 }
 
+// purgeAnonymous cascade-deletes guest users created before the cutoff and
+// returns how many were removed. Each user is removed via deleteUserCascade so
+// satellites go too (portable regardless of DB-level FKs).
+func (t tables) purgeAnonymous(db *gorm.DB, createdBefore time.Time) (int64, error) {
+	var ids []string
+	if err := db.Table(t.users).Where("is_anonymous = ? AND created_at < ?", true, createdBefore).
+		Pluck("id", &ids).Error; err != nil {
+		return 0, err
+	}
+	for _, id := range ids {
+		if err := t.deleteUserCascade(db, id); err != nil {
+			return 0, err
+		}
+	}
+	return int64(len(ids)), nil
+}
+
 // UserStore implements identity.UserStore over GORM.
 type UserStore struct {
 	db *gorm.DB
@@ -99,9 +117,10 @@ func NewRoleStore(db *gorm.DB, opts ...Option) *RoleStore {
 
 // Compile-time interface conformance.
 var (
-	_ identity.DefaultUserStore                          = (*UserStore)(nil)
-	_ identity.RoleStore                                 = (*RoleStore)(nil)
-	_ identity.UserLister[identity.User, *identity.User] = (*UserStore)(nil)
+	_ identity.DefaultUserStore                               = (*UserStore)(nil)
+	_ identity.RoleStore                                      = (*RoleStore)(nil)
+	_ identity.UserLister[identity.User, *identity.User]      = (*UserStore)(nil)
+	_ identity.AnonymousPurger[identity.User, *identity.User] = (*UserStore)(nil)
 )
 
 // Migrate creates/updates all identity tables for the resolved naming.
@@ -168,6 +187,11 @@ func (s *UserStore) Update(ctx context.Context, u *identity.User) error {
 
 func (s *UserStore) Delete(ctx context.Context, u *identity.User) error {
 	return s.t.deleteUserCascade(s.db.WithContext(ctx), u.ID)
+}
+
+// PurgeAnonymousUsers implements identity.AnonymousPurger.
+func (s *UserStore) PurgeAnonymousUsers(ctx context.Context, createdBefore time.Time) (int64, error) {
+	return s.t.purgeAnonymous(s.db.WithContext(ctx), createdBefore)
 }
 
 func (s *UserStore) findUser(ctx context.Context, where string, arg any) (*identity.User, error) {

@@ -29,6 +29,8 @@ var (
 	ErrInvalidUserName          = newErr("InvalidUserName", "User name contains characters that are not allowed.")
 	ErrPasswordAlreadySet       = newErr("PasswordAlreadySet", "User already has a password; use ChangePassword instead.")
 	ErrLoginAlreadyUsed         = newErr("LoginAlreadyAssociated", "External login is already associated with a user.")
+	ErrNotAnonymous             = newErr("NotAnonymous", "User is not a guest (anonymous) account.")
+	ErrPurgeNotSupported        = newErr("PurgeNotSupported", "The configured store does not support purging anonymous users.")
 	ErrPasswordMismatch         = newErr("PasswordMismatch", "Incorrect password.")
 	ErrUserLockedOut            = newErr("UserLockedOut", "User is locked out.")
 	ErrInvalidToken             = newErr("InvalidToken", "Invalid token.")

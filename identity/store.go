@@ -1,6 +1,9 @@
 package identity
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // Ptr constrains a pointer-to-T that is also a UserModel — the standard Go
 // pattern for "construct a new T" inside generic stores while requiring T to
@@ -120,6 +123,14 @@ func (f ListFilter) Clamp() ListFilter {
 // plus the total count of matching users (for pagination UIs).
 type UserLister[T any, PT Ptr[T]] interface {
 	ListUsers(ctx context.Context, f ListFilter) (page []PT, total int64, err error)
+}
+
+// AnonymousPurger is an OPTIONAL capability: bulk-delete guest (anonymous) users
+// created before a cutoff, cascading their satellite rows — the GC sweep behind
+// [UserManagerOf.PurgeAnonymousUsers]. Stores that don't implement it cause the
+// manager to return [ErrPurgeNotSupported].
+type AnonymousPurger[T any, PT Ptr[T]] interface {
+	PurgeAnonymousUsers(ctx context.Context, createdBefore time.Time) (deleted int64, err error)
 }
 
 // UserLoginInfo describes an external (OAuth/OIDC) login association.

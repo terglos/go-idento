@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/terglos/go-idento/identity"
 	"gorm.io/gorm"
@@ -25,8 +26,9 @@ type GenericUserStore[T any, PT identity.Ptr[T]] struct {
 // the optional lister) for a representative type, so a new interface method is
 // caught here as well as on the concrete store.
 var (
-	_ identity.UserStore[identity.User, *identity.User]  = (*GenericUserStore[identity.User, *identity.User])(nil)
-	_ identity.UserLister[identity.User, *identity.User] = (*GenericUserStore[identity.User, *identity.User])(nil)
+	_ identity.UserStore[identity.User, *identity.User]       = (*GenericUserStore[identity.User, *identity.User])(nil)
+	_ identity.UserLister[identity.User, *identity.User]      = (*GenericUserStore[identity.User, *identity.User])(nil)
+	_ identity.AnonymousPurger[identity.User, *identity.User] = (*GenericUserStore[identity.User, *identity.User])(nil)
 )
 
 // NewUserStoreOf builds a generic user store for T.
@@ -94,6 +96,11 @@ func (s *GenericUserStore[T, PT]) Update(ctx context.Context, u PT) error {
 
 func (s *GenericUserStore[T, PT]) Delete(ctx context.Context, u PT) error {
 	return s.t.deleteUserCascade(s.db.WithContext(ctx), u.Base().ID)
+}
+
+// PurgeAnonymousUsers implements identity.AnonymousPurger for the custom type.
+func (s *GenericUserStore[T, PT]) PurgeAnonymousUsers(ctx context.Context, createdBefore time.Time) (int64, error) {
+	return s.t.purgeAnonymous(s.db.WithContext(ctx), createdBefore)
 }
 
 func (s *GenericUserStore[T, PT]) find(ctx context.Context, where string, arg any) (PT, error) {

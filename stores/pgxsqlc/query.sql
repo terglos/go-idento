@@ -3,9 +3,9 @@ INSERT INTO identity_users (
     id, user_name, normalized_user_name, email, normalized_email, email_confirmed,
     password_hash, security_stamp, concurrency_stamp, phone_number,
     phone_number_confirmed, two_factor_enabled, lockout_end, lockout_enabled,
-    access_failed_count, attributes
+    access_failed_count, attributes, is_anonymous
 ) VALUES (
-    $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16
+    $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17
 );
 
 -- name: UpdateUser :execrows
@@ -16,11 +16,15 @@ UPDATE identity_users SET
     concurrency_stamp = @new_concurrency_stamp, phone_number = @phone_number,
     phone_number_confirmed = @phone_number_confirmed, two_factor_enabled = @two_factor_enabled,
     lockout_end = @lockout_end, lockout_enabled = @lockout_enabled,
-    access_failed_count = @access_failed_count, attributes = @attributes, updated_at = now()
+    access_failed_count = @access_failed_count, attributes = @attributes,
+    is_anonymous = @is_anonymous, updated_at = now()
 WHERE id = @id AND concurrency_stamp = @old_concurrency_stamp;
 
 -- name: DeleteUser :exec
 DELETE FROM identity_users WHERE id=$1;
+
+-- name: PurgeAnonymousUsers :execrows
+DELETE FROM identity_users WHERE is_anonymous AND created_at < $1;
 
 -- name: CountUsers :one
 SELECT count(*) FROM identity_users

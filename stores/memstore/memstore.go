@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/terglos/go-idento/identity"
 )
@@ -50,9 +51,10 @@ type userStore Store
 type roleStore Store
 
 var (
-	_ identity.DefaultUserStore                          = (*userStore)(nil)
-	_ identity.RoleStore                                 = (*roleStore)(nil)
-	_ identity.UserLister[identity.User, *identity.User] = (*userStore)(nil)
+	_ identity.DefaultUserStore                               = (*userStore)(nil)
+	_ identity.RoleStore                                      = (*roleStore)(nil)
+	_ identity.UserLister[identity.User, *identity.User]      = (*userStore)(nil)
+	_ identity.AnonymousPurger[identity.User, *identity.User] = (*userStore)(nil)
 )
 
 func tokenKey(userID, provider, name string) string { return userID + "|" + provider + "|" + name }
@@ -90,22 +92,42 @@ func (s *userStore) Update(_ context.Context, u *identity.User) error {
 func (s *userStore) Delete(_ context.Context, u *identity.User) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	delete(s.users, u.ID)
-	// Cascade: drop the user's memberships, claims, tokens and logins.
-	delete(s.userRoles, u.ID)
-	delete(s.userClaims, u.ID)
+	s.cascadeDeleteLocked(u.ID)
+	return nil
+}
+
+// cascadeDeleteLocked removes a user and its satellite rows. Caller holds s.mu.
+func (s *userStore) cascadeDeleteLocked(id string) {
+	delete(s.users, id)
+	delete(s.userRoles, id)
+	delete(s.userClaims, id)
 	for k := range s.tokens {
-		if strings.HasPrefix(k, u.ID+"|") {
+		if strings.HasPrefix(k, id+"|") {
 			delete(s.tokens, k)
 		}
 	}
 	for k, uid := range s.loginUser {
-		if uid == u.ID {
+		if uid == id {
 			delete(s.loginUser, k)
 			delete(s.logins, k)
 		}
 	}
-	return nil
+}
+
+// PurgeAnonymousUsers implements identity.AnonymousPurger.
+func (s *userStore) PurgeAnonymousUsers(_ context.Context, createdBefore time.Time) (int64, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var ids []string
+	for id, u := range s.users {
+		if u.IsAnonymous && u.CreatedAt.Before(createdBefore) {
+			ids = append(ids, id)
+		}
+	}
+	for _, id := range ids {
+		s.cascadeDeleteLocked(id)
+	}
+	return int64(len(ids)), nil
 }
 
 func (s *userStore) FindByID(_ context.Context, id string) (*identity.User, error) {
