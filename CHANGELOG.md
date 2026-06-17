@@ -4,6 +4,43 @@ Notable changes per release. Versions follow [SemVer](https://semver.org). This
 is a multi-module repo; all modules (`.`, `stores/gormstore`, `stores/pgxstore`,
 `stores/pgxsqlc`) share the same version tag.
 
+## v0.5.0
+
+First-class opaque API keys — long-lived machine-to-machine credentials for
+callers that can't do interactive login or token rotation (POS terminals,
+payment partners, webhooks). Requested for using go-idento as the single
+identity base of a payments platform.
+
+### Added
+- **`identity.APIKey`** entity (own `identity_api_keys` table, FK `ON DELETE
+  CASCADE` to users, unique `key_hash`, indexed `user_id`), honoring the existing
+  `WithSchema`/`WithTablePrefix`/`WithTableNames` config (`TableNames.APIKeys`).
+- **`identity.APIKeyManager`** (`APIKeyManagerOf[T,PT]`):
+  - `CreateAPIKey(ctx, user, opts)` — returns the plaintext secret ONCE; stores
+    only its hash + a display `Prefix`. `APIKeyOptions{Name, ExpiresAt, Scopes}`
+    (`ExpiresAt` nil = never expires).
+  - `VerifyAPIKey(ctx, plaintext)` — resolves the owning user (roles/claims
+    apply) with constant-time hash lookup; returns `ErrInvalidAPIKey` for an
+    unknown/revoked/expired key or locked-out owner (→ 401) and a wrapped store
+    error for infra failure (→ 503), so the two are distinguishable.
+  - `RevokeAPIKey`, `ListAPIKeys`, and `ImportAPIKey(...)` to insert a
+    **precomputed hash** — point the hasher at an existing scheme and keep
+    already-issued keys valid with zero reissue.
+  - Configurable `WithAPIKeyHasher` (default **SHA-256**, not PBKDF2 — keys are
+    high-entropy) and `WithAPIKeyPrefix`.
+- **`APIKeyStore`** capability implemented in all four stores (memstore,
+  gormstore, pgxstore, pgxsqlc); keys cascade when the owner is deleted/purged.
+- **`auth.WithAPIKeys(keyManager)`** middleware option: a Bearer value that isn't
+  a valid JWT is tried as an API key, producing the same `Principal` so
+  `RequireRole`/`RequirePolicy` work identically. `Principal.Scopes` +
+  `HasScope`, `Principal.ViaAPIKey`.
+
+### Schema
+- New `identity_api_keys` table in the pgx stores' `Migrate`, the canonical
+  `identity/migrations/postgres.sql`, and a versioned migration
+  (`migrations/20260614000001_api_keys.sql`). Independent of the
+  password/security-stamp lifecycle — a password change does not invalidate keys.
+
 ## v0.4.0
 
 First-class guest (anonymous) identity — from production feedback that

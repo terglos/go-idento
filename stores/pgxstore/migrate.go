@@ -121,5 +121,22 @@ CREATE INDEX IF NOT EXISTS %s ON %s (user_id);
 );
 `, UT, U)
 
+	AK := n.Qualify(n.Tables.APIKeys)
+	fmt.Fprintf(&b, `CREATE TABLE IF NOT EXISTS %s (
+	id           varchar(36)  PRIMARY KEY,
+	user_id      varchar(36)  NOT NULL REFERENCES %s(id) ON DELETE CASCADE,
+	name         varchar(256) NOT NULL DEFAULT '',
+	prefix       varchar(32)  NOT NULL DEFAULT '',
+	key_hash     varchar(128) NOT NULL,
+	scopes       jsonb        NOT NULL DEFAULT '[]'::jsonb,
+	expires_at   timestamptz,
+	last_used_at timestamptz,
+	revoked_at   timestamptz,
+	created_at   timestamptz  NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS %s ON %s (key_hash);
+CREATE INDEX IF NOT EXISTS %s ON %s (user_id);
+`, AK, U, ix("ux", n.Tables.APIKeys, "hash"), AK, ix("ix", n.Tables.APIKeys, "user"), AK)
+
 	return b.String()
 }

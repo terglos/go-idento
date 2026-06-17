@@ -10,7 +10,7 @@ management, password hashing, claims, lockout, two-factor and JWT, built on
 pluggable stores so the persistence layer can be swapped without touching
 business logic.
 
-> Status: beta (v0.4.0). User/role/sign-in managers, PBKDF2 hashing, JWT
+> Status: beta (v0.5.0). User/role/sign-in managers, PBKDF2 hashing, JWT
 > (HS256/RS256/ES256) + JWKS, TOTP/SMS two-factor with recovery codes, external
 > logins, email-confirmation/password-reset tokens, and policy authorization are
 > implemented and tested. Four stores ship: in-memory, GORM, raw `pgx`, and a
@@ -41,6 +41,7 @@ app and own your data. go-idento fills that gap with familiar building blocks �
 | Roles | `identity.RoleManager` (CRUD + role claims, optimistic concurrency) |
 | Queries | users-by-role / users-by-claim, paged `ListUsers` |
 | Sign-in | `identity.SignInManager` (password, 2FA, external, remember-this-machine, security-stamp validation) |
+| API keys | `identity.APIKeyManager` — opaque M2M bearer credentials (create/verify/revoke/list, non-expiring, hash-stored) |
 | Two-factor | TOTP + SMS + recovery codes, pluggable `TwoFactorTokenProvider` |
 | Tokens | `identity.TokenService` (JWT access + refresh, HS256/RS256/ES256) |
 | Delivery | `identity.SMSSender` / `identity.EmailSender` (provider-agnostic) |
@@ -165,6 +166,10 @@ EF `add-migration` loop. goose / golang-migrate can run the same SQL.
 - [x] **Phone (SMS) two-factor** via a pluggable `SMSSender`
 - [x] Email confirmation, password-reset & change-email token providers
 - [x] External/OAuth login association (`AddLogin` / `FindByLogin` / `ExternalLoginSignIn`)
+- [x] **Opaque API keys** (machine-to-machine): non-expiring, revocable,
+  hash-stored bearer credentials bound to a user — `CreateAPIKey` /
+  `VerifyAPIKey` / `RevokeAPIKey` / `ListAPIKeys`, configurable prefix + hasher,
+  `ImportAPIKey` for zero-reissue migration, and `auth.WithAPIKeys` middleware
 - [x] **Guest / anonymous identity**: `CreateAnonymous`, `ConvertToRegistered`
   (promote in place, preserving the ID), and a `PurgeAnonymousUsers` GC sweep
 - [x] Account lockout
@@ -215,6 +220,32 @@ users.ConvertToRegistered(ctx, guest, "jane", "jane@x.com", "Abcdef1!")
 // Reclaim abandoned guests from a cron/worker (cascades their satellite rows):
 n, _ := users.PurgeAnonymousUsers(ctx, time.Now().Add(-24*time.Hour))
 ```
+
+### API keys (machine-to-machine)
+
+Long-lived, opaque bearer credentials for callers that can't do interactive
+login or token rotation (POS terminals, payment partners, webhooks). Bound to a
+user, so roles/claims and the auth middleware apply unchanged.
+
+```go
+keys := identity.NewAPIKeyManager(gormstore.NewAPIKeyStore(db), users).
+    WithAPIKeyPrefix("myapp-")               // optional; default hasher is SHA-256
+
+secret, key, _ := keys.CreateAPIKey(ctx, u, identity.APIKeyOptions{
+    Name: "POS terminal", Scopes: []string{"pay:write"}, // ExpiresAt nil = never expires
+})
+// `secret` is shown ONCE — only its hash + display prefix (key.Prefix) are stored.
+
+// Authenticate requests: a Bearer value that isn't a JWT is tried as an API key.
+mux := auth.Middleware(tokens, cookies, auth.WithAPIKeys(keys)) // Authorization: Bearer <secret>
+
+owner, k, err := keys.VerifyAPIKey(ctx, secret) // err == identity.ErrInvalidAPIKey vs store error
+keys.RevokeAPIKey(ctx, key.ID)
+```
+
+Migrating from an existing key system? Point the hasher at your current function
+and `ImportAPIKey(userID, name, prefix, keyHash, expiresAt, scopes...)` your
+already-issued hashes — every key stays valid with zero reissue.
 
 ### JWKS endpoint
 

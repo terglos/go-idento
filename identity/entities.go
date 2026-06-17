@@ -134,6 +134,33 @@ type UserToken struct {
 
 func (UserToken) TableName() string { return "identity_user_tokens" }
 
+// APIKey is a long-lived, opaque machine-to-machine credential owned by a User
+// (e.g. for POS terminals or payment partners that can't do an interactive login
+// or refresh-token rotation). The secret is shown once at creation; only its
+// hash and a display prefix are stored. Present it as `Authorization: Bearer
+// <key>` — it resolves to the owning user (and thus its roles/claims) through
+// the auth middleware. Unlike refresh tokens, it is independent of the
+// password/security-stamp lifecycle: invalidate it by RevokedAt, ExpiresAt, or
+// the owner's lockout — a password change does NOT kill it.
+type APIKey struct {
+	ID         string     `gorm:"primaryKey;type:varchar(36)" json:"id"`
+	UserID     string     `gorm:"type:varchar(36);index" json:"userId"`
+	Name       string     `gorm:"type:varchar(256)" json:"name"`
+	Prefix     string     `gorm:"type:varchar(32);index" json:"prefix"`
+	KeyHash    string     `gorm:"type:varchar(128);uniqueIndex" json:"-"`
+	Scopes     Scopes     `gorm:"serializer:json;type:text" json:"scopes,omitempty"`
+	ExpiresAt  *time.Time `json:"expiresAt"`  // nil = never expires
+	LastUsedAt *time.Time `json:"lastUsedAt"` // best-effort, updated on verify
+	RevokedAt  *time.Time `json:"revokedAt"`
+	CreatedAt  time.Time  `json:"createdAt"`
+}
+
+func (APIKey) TableName() string { return "identity_api_keys" }
+
+// Scopes is a JSON-serialized list of scope strings optionally attached to an
+// [APIKey] (a subset of the owner's authority, surfaced on the auth Principal).
+type Scopes []string
+
 // Claim is a type/value pair attached to a user or role.
 type Claim struct {
 	Type  string `json:"type"`

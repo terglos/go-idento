@@ -147,6 +147,22 @@ func TestPgxIntegration(t *testing.T) {
 		t.Fatal("fresh guest should remain")
 	}
 
+	// API keys against real Postgres: create, verify (owner+scopes), revoke.
+	keys := identity.NewAPIKeyManager(pgxstore.NewAPIKeyStore(pool), um)
+	apiSecret, apiKey, err := keys.CreateAPIKey(ctx, signed, identity.APIKeyOptions{Name: "pos", Scopes: []string{"pay:write"}})
+	if err != nil {
+		t.Fatalf("CreateAPIKey: %v", err)
+	}
+	if owner, vk, err := keys.VerifyAPIKey(ctx, apiSecret); err != nil || owner.ID != signed.ID || len(vk.Scopes) != 1 {
+		t.Fatalf("VerifyAPIKey: owner=%v err=%v", owner, err)
+	}
+	if err := keys.RevokeAPIKey(ctx, apiKey.ID); err != nil {
+		t.Fatalf("revoke: %v", err)
+	}
+	if _, _, err := keys.VerifyAPIKey(ctx, apiSecret); err != identity.ErrInvalidAPIKey {
+		t.Fatalf("revoked key must be ErrInvalidAPIKey, got %v", err)
+	}
+
 	// Store behavioral contract against real Postgres.
 	if err := um.AddToRole(ctx, signed, "ghost"); err != identity.ErrRoleNotFound {
 		t.Fatalf("AddToRole(missing role) must be ErrRoleNotFound, got %v", err)

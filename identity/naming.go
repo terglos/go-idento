@@ -34,6 +34,7 @@ type TableNames struct {
 	RoleClaims string
 	UserLogins string
 	UserTokens string
+	APIKeys    string
 }
 
 // DefaultTableNames returns the canonical identity_* names.
@@ -46,6 +47,7 @@ func DefaultTableNames() TableNames {
 		RoleClaims: "identity_role_claims",
 		UserLogins: "identity_user_logins",
 		UserTokens: "identity_user_tokens",
+		APIKeys:    "identity_api_keys",
 	}
 }
 
@@ -61,6 +63,7 @@ func (n TableNames) WithPrefix(prefix string) TableNames {
 		RoleClaims: prefix + n.RoleClaims,
 		UserLogins: prefix + n.UserLogins,
 		UserTokens: prefix + n.UserTokens,
+		APIKeys:    prefix + n.APIKeys,
 	}
 }
 
@@ -87,6 +90,7 @@ func (n Naming) Validate() error {
 		"Users": n.Tables.Users, "Roles": n.Tables.Roles, "UserRoles": n.Tables.UserRoles,
 		"UserClaims": n.Tables.UserClaims, "RoleClaims": n.Tables.RoleClaims,
 		"UserLogins": n.Tables.UserLogins, "UserTokens": n.Tables.UserTokens,
+		"APIKeys": n.Tables.APIKeys,
 	} {
 		if !isValidIdentifier(name) {
 			return fmt.Errorf("%w: table %s=%q", ErrInvalidIdentifier, label, name)

@@ -9,6 +9,19 @@ import (
 	"time"
 )
 
+type IdentityApiKey struct {
+	ID         string
+	UserID     string
+	Name       string
+	Prefix     string
+	KeyHash    string
+	Scopes     json.RawMessage
+	ExpiresAt  *time.Time
+	LastUsedAt *time.Time
+	RevokedAt  *time.Time
+	CreatedAt  time.Time
+}
+
 type IdentityRole struct {
 	ID               string
 	Name             string

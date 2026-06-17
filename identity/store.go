@@ -125,6 +125,23 @@ type UserLister[T any, PT Ptr[T]] interface {
 	ListUsers(ctx context.Context, f ListFilter) (page []PT, total int64, err error)
 }
 
+// APIKeyStore persists opaque API keys (see [APIKey]). It is a small, composable
+// capability the bundled stores implement; wire it into an [APIKeyManagerOf].
+// Method names carry the APIKey suffix so a single store type can implement both
+// this and [UserStore] without collisions.
+type APIKeyStore interface {
+	CreateAPIKey(ctx context.Context, k *APIKey) error
+	// GetActiveAPIKeyByHash returns the key with keyHash that is neither revoked
+	// nor past ExpiresAt; it returns [ErrNotFound] when absent/revoked/expired
+	// (so callers can't distinguish those — all map to an invalid key) and a real
+	// error only on store/infra failure.
+	GetActiveAPIKeyByHash(ctx context.Context, keyHash string) (*APIKey, error)
+	ListAPIKeysByUser(ctx context.Context, userID string) ([]APIKey, error)
+	RevokeAPIKey(ctx context.Context, id string) error
+	// TouchAPIKeyLastUsed updates LastUsedAt; callers treat failure as non-fatal.
+	TouchAPIKeyLastUsed(ctx context.Context, id string) error
+}
+
 // AnonymousPurger is an OPTIONAL capability: bulk-delete guest (anonymous) users
 // created before a cutoff, cascading their satellite rows — the GC sweep behind
 // [UserManagerOf.PurgeAnonymousUsers]. Stores that don't implement it cause the

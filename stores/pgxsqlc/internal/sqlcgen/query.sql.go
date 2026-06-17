@@ -91,6 +91,36 @@ func (q *Queries) CountUsers(ctx context.Context, search string) (int64, error) 
 	return count, err
 }
 
+const createAPIKey = `-- name: CreateAPIKey :exec
+INSERT INTO identity_api_keys (id, user_id, name, prefix, key_hash, scopes, expires_at, created_at)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+`
+
+type CreateAPIKeyParams struct {
+	ID        string
+	UserID    string
+	Name      string
+	Prefix    string
+	KeyHash   string
+	Scopes    json.RawMessage
+	ExpiresAt *time.Time
+	CreatedAt time.Time
+}
+
+func (q *Queries) CreateAPIKey(ctx context.Context, arg CreateAPIKeyParams) error {
+	_, err := q.db.Exec(ctx, createAPIKey,
+		arg.ID,
+		arg.UserID,
+		arg.Name,
+		arg.Prefix,
+		arg.KeyHash,
+		arg.Scopes,
+		arg.ExpiresAt,
+		arg.CreatedAt,
+	)
+	return err
+}
+
 const createRole = `-- name: CreateRole :exec
 INSERT INTO identity_roles (id, name, normalized_name, concurrency_stamp)
 VALUES ($1,$2,$3,$4)
@@ -228,6 +258,30 @@ type DeleteUserTokenParams struct {
 func (q *Queries) DeleteUserToken(ctx context.Context, arg DeleteUserTokenParams) error {
 	_, err := q.db.Exec(ctx, deleteUserToken, arg.UserID, arg.LoginProvider, arg.Name)
 	return err
+}
+
+const getActiveAPIKeyByHash = `-- name: GetActiveAPIKeyByHash :one
+SELECT id, user_id, name, prefix, key_hash, scopes, expires_at, last_used_at, revoked_at, created_at
+FROM identity_api_keys
+WHERE key_hash = $1 AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > now())
+`
+
+func (q *Queries) GetActiveAPIKeyByHash(ctx context.Context, keyHash string) (IdentityApiKey, error) {
+	row := q.db.QueryRow(ctx, getActiveAPIKeyByHash, keyHash)
+	var i IdentityApiKey
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Name,
+		&i.Prefix,
+		&i.KeyHash,
+		&i.Scopes,
+		&i.ExpiresAt,
+		&i.LastUsedAt,
+		&i.RevokedAt,
+		&i.CreatedAt,
+	)
+	return i, err
 }
 
 const getRoleByID = `-- name: GetRoleByID :one
@@ -637,6 +691,42 @@ func (q *Queries) IsUserInRole(ctx context.Context, arg IsUserInRoleParams) (boo
 	return exists, err
 }
 
+const listAPIKeysByUser = `-- name: ListAPIKeysByUser :many
+SELECT id, user_id, name, prefix, key_hash, scopes, expires_at, last_used_at, revoked_at, created_at
+FROM identity_api_keys WHERE user_id = $1 ORDER BY created_at
+`
+
+func (q *Queries) ListAPIKeysByUser(ctx context.Context, userID string) ([]IdentityApiKey, error) {
+	rows, err := q.db.Query(ctx, listAPIKeysByUser, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []IdentityApiKey
+	for rows.Next() {
+		var i IdentityApiKey
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.Name,
+			&i.Prefix,
+			&i.KeyHash,
+			&i.Scopes,
+			&i.ExpiresAt,
+			&i.LastUsedAt,
+			&i.RevokedAt,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listUsers = `-- name: ListUsers :many
 SELECT id, user_name, normalized_user_name, email, normalized_email, email_confirmed, password_hash, security_stamp, concurrency_stamp, phone_number, phone_number_confirmed, two_factor_enabled, lockout_end, lockout_enabled, access_failed_count, attributes, is_anonymous, created_at, updated_at FROM identity_users
 WHERE $1::text = '' OR normalized_user_name LIKE '%' || $1 || '%'
@@ -732,6 +822,15 @@ func (q *Queries) RemoveUserLogin(ctx context.Context, arg RemoveUserLoginParams
 	return err
 }
 
+const revokeAPIKey = `-- name: RevokeAPIKey :exec
+UPDATE identity_api_keys SET revoked_at = now() WHERE id = $1 AND revoked_at IS NULL
+`
+
+func (q *Queries) RevokeAPIKey(ctx context.Context, id string) error {
+	_, err := q.db.Exec(ctx, revokeAPIKey, id)
+	return err
+}
+
 const roleExists = `-- name: RoleExists :one
 SELECT EXISTS(SELECT 1 FROM identity_roles WHERE id=$1)
 `
@@ -741,6 +840,15 @@ func (q *Queries) RoleExists(ctx context.Context, id string) (bool, error) {
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
+}
+
+const touchAPIKeyLastUsed = `-- name: TouchAPIKeyLastUsed :exec
+UPDATE identity_api_keys SET last_used_at = now() WHERE id = $1
+`
+
+func (q *Queries) TouchAPIKeyLastUsed(ctx context.Context, id string) error {
+	_, err := q.db.Exec(ctx, touchAPIKeyLastUsed, id)
+	return err
 }
 
 const updateRole = `-- name: UpdateRole :execrows

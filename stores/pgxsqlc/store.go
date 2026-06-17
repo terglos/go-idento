@@ -387,3 +387,74 @@ func (s *RoleStore) AddClaim(ctx context.Context, r *identity.Role, c identity.C
 func (s *RoleStore) RemoveClaim(ctx context.Context, r *identity.Role, c identity.Claim) error {
 	return s.q.DeleteRoleClaim(ctx, gen.DeleteRoleClaimParams{RoleID: r.ID, ClaimType: c.Type, ClaimValue: c.Value})
 }
+
+// --- APIKeyStore ---
+
+// APIKeyStore adapts the sqlc queries to identity.APIKeyStore.
+type APIKeyStore struct{ q *gen.Queries }
+
+var _ identity.APIKeyStore = (*APIKeyStore)(nil)
+
+// NewAPIKeyStore builds an API-key store over the sqlc queries.
+func NewAPIKeyStore(db *pgxpool.Pool) *APIKeyStore { return &APIKeyStore{q: gen.New(db)} }
+
+func toAPIKey(r gen.IdentityApiKey) *identity.APIKey {
+	k := &identity.APIKey{
+		ID: r.ID, UserID: r.UserID, Name: r.Name, Prefix: r.Prefix, KeyHash: r.KeyHash,
+		ExpiresAt: r.ExpiresAt, LastUsedAt: r.LastUsedAt, RevokedAt: r.RevokedAt, CreatedAt: r.CreatedAt,
+	}
+	if len(r.Scopes) > 0 {
+		_ = json.Unmarshal(r.Scopes, &k.Scopes)
+	}
+	return k
+}
+
+func scopesJSON(s identity.Scopes) json.RawMessage {
+	if len(s) == 0 {
+		return json.RawMessage("[]")
+	}
+	b, err := json.Marshal(s)
+	if err != nil {
+		return json.RawMessage("[]")
+	}
+	return b
+}
+
+func (s *APIKeyStore) CreateAPIKey(ctx context.Context, k *identity.APIKey) error {
+	created := k.CreatedAt
+	if created.IsZero() {
+		created = time.Now()
+	}
+	return s.q.CreateAPIKey(ctx, gen.CreateAPIKeyParams{
+		ID: k.ID, UserID: k.UserID, Name: k.Name, Prefix: k.Prefix, KeyHash: k.KeyHash,
+		Scopes: scopesJSON(k.Scopes), ExpiresAt: k.ExpiresAt, CreatedAt: created,
+	})
+}
+
+func (s *APIKeyStore) GetActiveAPIKeyByHash(ctx context.Context, keyHash string) (*identity.APIKey, error) {
+	r, err := s.q.GetActiveAPIKeyByHash(ctx, keyHash)
+	if err != nil {
+		return nil, mapNotFound(err)
+	}
+	return toAPIKey(r), nil
+}
+
+func (s *APIKeyStore) ListAPIKeysByUser(ctx context.Context, userID string) ([]identity.APIKey, error) {
+	rows, err := s.q.ListAPIKeysByUser(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]identity.APIKey, len(rows))
+	for i, r := range rows {
+		out[i] = *toAPIKey(r)
+	}
+	return out, nil
+}
+
+func (s *APIKeyStore) RevokeAPIKey(ctx context.Context, id string) error {
+	return s.q.RevokeAPIKey(ctx, id)
+}
+
+func (s *APIKeyStore) TouchAPIKeyLastUsed(ctx context.Context, id string) error {
+	return s.q.TouchAPIKeyLastUsed(ctx, id)
+}

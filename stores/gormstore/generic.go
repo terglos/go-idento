@@ -59,6 +59,7 @@ func MigrateOf[T any](db *gorm.DB, opts ...Option) error {
 		{t.roles, &identity.Role{}}, {t.userRoles, &identity.UserRole{}},
 		{t.userClaims, &identity.UserClaim{}}, {t.roleClaims, &identity.RoleClaim{}},
 		{t.userLogins, &identity.UserLogin{}}, {t.userTokens, &identity.UserToken{}},
+		{t.apiKeys, &identity.APIKey{}},
 	}
 	for _, s := range steps {
 		if err := db.Table(s.name).AutoMigrate(s.model); err != nil {

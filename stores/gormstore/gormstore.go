@@ -50,7 +50,7 @@ func resolve(opts ...Option) identity.Naming {
 
 // tables holds the resolved (schema-qualified) physical table names.
 type tables struct {
-	users, roles, userRoles, userClaims, roleClaims, userLogins, userTokens string
+	users, roles, userRoles, userClaims, roleClaims, userLogins, userTokens, apiKeys string
 }
 
 func resolveTables(n identity.Naming) tables {
@@ -62,6 +62,7 @@ func resolveTables(n identity.Naming) tables {
 		roleClaims: n.Qualify(n.Tables.RoleClaims),
 		userLogins: n.Qualify(n.Tables.UserLogins),
 		userTokens: n.Qualify(n.Tables.UserTokens),
+		apiKeys:    n.Qualify(n.Tables.APIKeys),
 	}
 }
 
@@ -70,7 +71,7 @@ func resolveTables(n identity.Naming) tables {
 // off or absent).
 func (t tables) deleteUserCascade(db *gorm.DB, userID string) error {
 	return db.Transaction(func(tx *gorm.DB) error {
-		for _, table := range []string{t.userRoles, t.userClaims, t.userLogins, t.userTokens} {
+		for _, table := range []string{t.userRoles, t.userClaims, t.userLogins, t.userTokens, t.apiKeys} {
 			if err := tx.Exec(fmt.Sprintf("DELETE FROM %s WHERE user_id = ?", table), userID).Error; err != nil {
 				return err
 			}
@@ -142,6 +143,7 @@ func Migrate(db *gorm.DB, opts ...Option) error {
 		{t.users, &identity.User{}}, {t.roles, &identity.Role{}}, {t.userRoles, &identity.UserRole{}},
 		{t.userClaims, &identity.UserClaim{}}, {t.roleClaims, &identity.RoleClaim{}},
 		{t.userLogins, &identity.UserLogin{}}, {t.userTokens, &identity.UserToken{}},
+		{t.apiKeys, &identity.APIKey{}},
 	}
 	for _, s := range steps {
 		if err := db.Table(s.name).AutoMigrate(s.model); err != nil {

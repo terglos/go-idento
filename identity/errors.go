@@ -31,6 +31,7 @@ var (
 	ErrLoginAlreadyUsed         = newErr("LoginAlreadyAssociated", "External login is already associated with a user.")
 	ErrNotAnonymous             = newErr("NotAnonymous", "User is not a guest (anonymous) account.")
 	ErrPurgeNotSupported        = newErr("PurgeNotSupported", "The configured store does not support purging anonymous users.")
+	ErrInvalidAPIKey            = newErr("InvalidAPIKey", "API key is invalid, revoked or expired.")
 	ErrPasswordMismatch         = newErr("PasswordMismatch", "Incorrect password.")
 	ErrUserLockedOut            = newErr("UserLockedOut", "User is locked out.")
 	ErrInvalidToken             = newErr("InvalidToken", "Invalid token.")

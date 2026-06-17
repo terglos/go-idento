@@ -148,3 +148,22 @@ INSERT INTO identity_role_claims (role_id, claim_type, claim_value) VALUES ($1,$
 
 -- name: DeleteRoleClaim :exec
 DELETE FROM identity_role_claims WHERE role_id=$1 AND claim_type=$2 AND claim_value=$3;
+
+-- name: CreateAPIKey :exec
+INSERT INTO identity_api_keys (id, user_id, name, prefix, key_hash, scopes, expires_at, created_at)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8);
+
+-- name: GetActiveAPIKeyByHash :one
+SELECT id, user_id, name, prefix, key_hash, scopes, expires_at, last_used_at, revoked_at, created_at
+FROM identity_api_keys
+WHERE key_hash = $1 AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > now());
+
+-- name: ListAPIKeysByUser :many
+SELECT id, user_id, name, prefix, key_hash, scopes, expires_at, last_used_at, revoked_at, created_at
+FROM identity_api_keys WHERE user_id = $1 ORDER BY created_at;
+
+-- name: RevokeAPIKey :exec
+UPDATE identity_api_keys SET revoked_at = now() WHERE id = $1 AND revoked_at IS NULL;
+
+-- name: TouchAPIKeyLastUsed :exec
+UPDATE identity_api_keys SET last_used_at = now() WHERE id = $1;

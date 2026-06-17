@@ -72,3 +72,18 @@ CREATE TABLE IF NOT EXISTS identity_user_tokens (
     value          text         NOT NULL DEFAULT '',
     PRIMARY KEY (user_id, login_provider, name)
 );
+
+CREATE TABLE IF NOT EXISTS identity_api_keys (
+    id           varchar(36)  PRIMARY KEY,
+    user_id      varchar(36)  NOT NULL REFERENCES identity_users(id) ON DELETE CASCADE,
+    name         varchar(256) NOT NULL DEFAULT '',
+    prefix       varchar(32)  NOT NULL DEFAULT '',
+    key_hash     varchar(128) NOT NULL,
+    scopes       jsonb        NOT NULL DEFAULT '[]'::jsonb,
+    expires_at   timestamptz,
+    last_used_at timestamptz,
+    revoked_at   timestamptz,
+    created_at   timestamptz  NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_identity_api_keys_hash ON identity_api_keys (key_hash);
+CREATE INDEX IF NOT EXISTS ix_identity_api_keys_user ON identity_api_keys (user_id);

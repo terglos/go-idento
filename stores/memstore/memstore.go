@@ -26,6 +26,7 @@ type Store struct {
 	tokens     map[string]string                 // userID|provider|name -> value
 	logins     map[string]identity.UserLoginInfo // provider|key -> info
 	loginUser  map[string]string                 // provider|key -> userID
+	apiKeys    map[string]*identity.APIKey       // by ID
 }
 
 func New() *Store {
@@ -38,6 +39,7 @@ func New() *Store {
 		tokens:     map[string]string{},
 		logins:     map[string]identity.UserLoginInfo{},
 		loginUser:  map[string]string{},
+		apiKeys:    map[string]*identity.APIKey{},
 	}
 }
 
@@ -47,14 +49,19 @@ func (s *Store) Users() identity.DefaultUserStore { return (*userStore)(s) }
 // Roles returns a RoleStore view.
 func (s *Store) Roles() identity.RoleStore { return (*roleStore)(s) }
 
+// APIKeys returns an APIKeyStore view.
+func (s *Store) APIKeys() identity.APIKeyStore { return (*apiKeyStore)(s) }
+
 type userStore Store
 type roleStore Store
+type apiKeyStore Store
 
 var (
 	_ identity.DefaultUserStore                               = (*userStore)(nil)
 	_ identity.RoleStore                                      = (*roleStore)(nil)
 	_ identity.UserLister[identity.User, *identity.User]      = (*userStore)(nil)
 	_ identity.AnonymousPurger[identity.User, *identity.User] = (*userStore)(nil)
+	_ identity.APIKeyStore                                    = (*apiKeyStore)(nil)
 )
 
 func tokenKey(userID, provider, name string) string { return userID + "|" + provider + "|" + name }
@@ -110,6 +117,11 @@ func (s *userStore) cascadeDeleteLocked(id string) {
 		if uid == id {
 			delete(s.loginUser, k)
 			delete(s.logins, k)
+		}
+	}
+	for kid, k := range s.apiKeys {
+		if k.UserID == id {
+			delete(s.apiKeys, kid)
 		}
 	}
 }
