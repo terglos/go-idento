@@ -6,7 +6,7 @@ toolchain go1.26.4
 
 require (
 	github.com/jackc/pgx/v5 v5.10.0
-	github.com/terglos/go-idento v0.5.0
+	github.com/terglos/go-idento v0.6.0
 )
 
 require (
