@@ -161,6 +161,24 @@ func (APIKey) TableName() string { return "identity_api_keys" }
 // [APIKey] (a subset of the owner's authority, surfaced on the auth Principal).
 type Scopes []string
 
+// RefreshToken is one refresh session: one row per device/browser/session, so a
+// user can hold several concurrent sessions (the industry model — one row per
+// token, like Duende's PersistedGrants or OpenIddict's token table). The opaque
+// token handed to the client is "<SessionID>.<secret>"; only the secret's hash
+// is stored, and rotation updates the SAME row (new hash, re-stamped expiry).
+// Enable it on the TokenService with WithSessionStore.
+type RefreshToken struct {
+	SessionID  string     `gorm:"primaryKey;type:varchar(36)" json:"sessionId"`
+	UserID     string     `gorm:"type:varchar(36);index" json:"userId"`
+	TokenHash  string     `gorm:"type:varchar(128);uniqueIndex" json:"-"`
+	Name       string     `gorm:"type:varchar(256)" json:"name"` // optional device/session label
+	ExpiresAt  time.Time  `json:"expiresAt"`
+	CreatedAt  time.Time  `json:"createdAt"`
+	LastUsedAt *time.Time `json:"lastUsedAt"` // stamped on each rotation
+}
+
+func (RefreshToken) TableName() string { return "identity_refresh_tokens" }
+
 // Claim is a type/value pair attached to a user or role.
 type Claim struct {
 	Type  string `json:"type"`

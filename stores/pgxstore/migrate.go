@@ -138,5 +138,20 @@ CREATE UNIQUE INDEX IF NOT EXISTS %s ON %s (key_hash);
 CREATE INDEX IF NOT EXISTS %s ON %s (user_id);
 `, AK, U, ix("ux", n.Tables.APIKeys, "hash"), AK, ix("ix", n.Tables.APIKeys, "user"), AK)
 
+	RT := n.Qualify(n.Tables.RefreshTokens)
+	fmt.Fprintf(&b, `CREATE TABLE IF NOT EXISTS %s (
+	session_id   varchar(36)  PRIMARY KEY,
+	user_id      varchar(36)  NOT NULL REFERENCES %s(id) ON DELETE CASCADE,
+	token_hash   varchar(128) NOT NULL,
+	name         varchar(256) NOT NULL DEFAULT '',
+	expires_at   timestamptz  NOT NULL,
+	created_at   timestamptz  NOT NULL DEFAULT now(),
+	last_used_at timestamptz
+);
+CREATE UNIQUE INDEX IF NOT EXISTS %s ON %s (token_hash);
+CREATE INDEX IF NOT EXISTS %s ON %s (user_id);
+CREATE INDEX IF NOT EXISTS %s ON %s (expires_at);
+`, RT, U, ix("ux", n.Tables.RefreshTokens, "hash"), RT, ix("ix", n.Tables.RefreshTokens, "user"), RT, ix("ix", n.Tables.RefreshTokens, "exp"), RT)
+
 	return b.String()
 }

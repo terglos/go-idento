@@ -458,3 +458,79 @@ func (s *APIKeyStore) RevokeAPIKey(ctx context.Context, id string) error {
 func (s *APIKeyStore) TouchAPIKeyLastUsed(ctx context.Context, id string) error {
 	return s.q.TouchAPIKeyLastUsed(ctx, id)
 }
+
+// --- RefreshTokenStore ---
+
+// RefreshTokenStore adapts the sqlc queries to identity.RefreshTokenStore.
+type RefreshTokenStore struct{ q *gen.Queries }
+
+var _ identity.RefreshTokenStore = (*RefreshTokenStore)(nil)
+
+// NewRefreshTokenStore builds a refresh-session store over the sqlc queries.
+func NewRefreshTokenStore(db *pgxpool.Pool) *RefreshTokenStore {
+	return &RefreshTokenStore{q: gen.New(db)}
+}
+
+func toRefreshToken(r gen.IdentityRefreshToken) *identity.RefreshToken {
+	return &identity.RefreshToken{
+		SessionID: r.SessionID, UserID: r.UserID, TokenHash: r.TokenHash, Name: r.Name,
+		ExpiresAt: r.ExpiresAt, CreatedAt: r.CreatedAt, LastUsedAt: r.LastUsedAt,
+	}
+}
+
+func (s *RefreshTokenStore) CreateRefreshToken(ctx context.Context, rt *identity.RefreshToken) error {
+	created := rt.CreatedAt
+	if created.IsZero() {
+		created = time.Now()
+	}
+	return s.q.CreateRefreshToken(ctx, gen.CreateRefreshTokenParams{
+		SessionID: rt.SessionID, UserID: rt.UserID, TokenHash: rt.TokenHash, Name: rt.Name,
+		ExpiresAt: rt.ExpiresAt, CreatedAt: created, LastUsedAt: rt.LastUsedAt,
+	})
+}
+
+func (s *RefreshTokenStore) GetRefreshTokenBySession(ctx context.Context, sessionID string) (*identity.RefreshToken, error) {
+	r, err := s.q.GetRefreshTokenBySession(ctx, sessionID)
+	if err != nil {
+		return nil, mapNotFound(err)
+	}
+	return toRefreshToken(r), nil
+}
+
+func (s *RefreshTokenStore) UpdateRefreshToken(ctx context.Context, rt *identity.RefreshToken) error {
+	n, err := s.q.UpdateRefreshToken(ctx, gen.UpdateRefreshTokenParams{
+		SessionID: rt.SessionID, TokenHash: rt.TokenHash,
+		ExpiresAt: rt.ExpiresAt, LastUsedAt: rt.LastUsedAt, Name: rt.Name,
+	})
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return identity.ErrNotFound
+	}
+	return nil
+}
+
+func (s *RefreshTokenStore) DeleteRefreshToken(ctx context.Context, sessionID string) error {
+	return s.q.DeleteRefreshToken(ctx, sessionID)
+}
+
+func (s *RefreshTokenStore) DeleteUserRefreshTokens(ctx context.Context, userID string) (int64, error) {
+	return s.q.DeleteUserRefreshTokens(ctx, userID)
+}
+
+func (s *RefreshTokenStore) DeleteExpiredRefreshTokens(ctx context.Context, before time.Time) (int64, error) {
+	return s.q.DeleteExpiredRefreshTokens(ctx, before)
+}
+
+func (s *RefreshTokenStore) ListUserRefreshTokens(ctx context.Context, userID string) ([]identity.RefreshToken, error) {
+	rows, err := s.q.ListUserRefreshTokens(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]identity.RefreshToken, len(rows))
+	for i, r := range rows {
+		out[i] = *toRefreshToken(r)
+	}
+	return out, nil
+}

@@ -18,28 +18,30 @@ import (
 type Store struct {
 	mu sync.RWMutex
 
-	users      map[string]*identity.User  // by ID
-	roles      map[string]*identity.Role  // by ID
-	userRoles  map[string]map[string]bool // userID -> set of roleID
-	userClaims map[string][]identity.Claim
-	roleClaims map[string][]identity.Claim
-	tokens     map[string]string                 // userID|provider|name -> value
-	logins     map[string]identity.UserLoginInfo // provider|key -> info
-	loginUser  map[string]string                 // provider|key -> userID
-	apiKeys    map[string]*identity.APIKey       // by ID
+	users         map[string]*identity.User  // by ID
+	roles         map[string]*identity.Role  // by ID
+	userRoles     map[string]map[string]bool // userID -> set of roleID
+	userClaims    map[string][]identity.Claim
+	roleClaims    map[string][]identity.Claim
+	tokens        map[string]string                 // userID|provider|name -> value
+	logins        map[string]identity.UserLoginInfo // provider|key -> info
+	loginUser     map[string]string                 // provider|key -> userID
+	apiKeys       map[string]*identity.APIKey       // by ID
+	refreshTokens map[string]*identity.RefreshToken // by SessionID
 }
 
 func New() *Store {
 	return &Store{
-		users:      map[string]*identity.User{},
-		roles:      map[string]*identity.Role{},
-		userRoles:  map[string]map[string]bool{},
-		userClaims: map[string][]identity.Claim{},
-		roleClaims: map[string][]identity.Claim{},
-		tokens:     map[string]string{},
-		logins:     map[string]identity.UserLoginInfo{},
-		loginUser:  map[string]string{},
-		apiKeys:    map[string]*identity.APIKey{},
+		users:         map[string]*identity.User{},
+		roles:         map[string]*identity.Role{},
+		userRoles:     map[string]map[string]bool{},
+		userClaims:    map[string][]identity.Claim{},
+		roleClaims:    map[string][]identity.Claim{},
+		tokens:        map[string]string{},
+		logins:        map[string]identity.UserLoginInfo{},
+		loginUser:     map[string]string{},
+		apiKeys:       map[string]*identity.APIKey{},
+		refreshTokens: map[string]*identity.RefreshToken{},
 	}
 }
 
@@ -52,9 +54,13 @@ func (s *Store) Roles() identity.RoleStore { return (*roleStore)(s) }
 // APIKeys returns an APIKeyStore view.
 func (s *Store) APIKeys() identity.APIKeyStore { return (*apiKeyStore)(s) }
 
+// RefreshTokens returns a RefreshTokenStore view (multi-session refresh).
+func (s *Store) RefreshTokens() identity.RefreshTokenStore { return (*refreshTokenStore)(s) }
+
 type userStore Store
 type roleStore Store
 type apiKeyStore Store
+type refreshTokenStore Store
 
 var (
 	_ identity.DefaultUserStore                               = (*userStore)(nil)
@@ -62,6 +68,7 @@ var (
 	_ identity.UserLister[identity.User, *identity.User]      = (*userStore)(nil)
 	_ identity.AnonymousPurger[identity.User, *identity.User] = (*userStore)(nil)
 	_ identity.APIKeyStore                                    = (*apiKeyStore)(nil)
+	_ identity.RefreshTokenStore                              = (*refreshTokenStore)(nil)
 )
 
 func tokenKey(userID, provider, name string) string { return userID + "|" + provider + "|" + name }
@@ -122,6 +129,11 @@ func (s *userStore) cascadeDeleteLocked(id string) {
 	for kid, k := range s.apiKeys {
 		if k.UserID == id {
 			delete(s.apiKeys, kid)
+		}
+	}
+	for sid, rt := range s.refreshTokens {
+		if rt.UserID == id {
+			delete(s.refreshTokens, sid)
 		}
 	}
 }

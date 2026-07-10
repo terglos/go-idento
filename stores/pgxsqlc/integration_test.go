@@ -139,6 +139,33 @@ func TestSqlcIntegration(t *testing.T) {
 		t.Fatal("fresh guest should remain")
 	}
 
+	// Multi-session refresh tokens through the sqlc store.
+	mts := identity.NewTokenService(um, identity.DefaultTokenOptions([]byte("sqlc-sessions-key-000000000000000"), "go-idento", "api")).
+		WithSessionStore(pgxsqlc.NewRefreshTokenStore(pool))
+	sessA, err := mts.IssuePair(ctx, signed)
+	if err != nil {
+		t.Fatalf("session A: %v", err)
+	}
+	sessB, err := mts.IssuePair(ctx, signed)
+	if err != nil {
+		t.Fatalf("session B: %v", err)
+	}
+	if _, err := mts.Refresh(ctx, signed, sessA.RefreshToken); err != nil {
+		t.Fatalf("session A must survive B's login: %v", err)
+	}
+	if err := mts.RevokeSession(ctx, signed, sessB.RefreshToken); err != nil {
+		t.Fatalf("RevokeSession: %v", err)
+	}
+	if _, err := mts.Refresh(ctx, signed, sessB.RefreshToken); err == nil {
+		t.Fatal("revoked session B must not refresh")
+	}
+	if err := mts.Revoke(ctx, signed); err != nil {
+		t.Fatalf("global revoke: %v", err)
+	}
+	if sessions, _ := mts.ListSessions(ctx, signed); len(sessions) != 0 {
+		t.Fatalf("no sessions after global revoke, got %d", len(sessions))
+	}
+
 	// API keys through the sqlc store: create, verify (owner+scopes), revoke.
 	keys := identity.NewAPIKeyManager(pgxsqlc.NewAPIKeyStore(pool), um)
 	apiSecret, apiKey, err := keys.CreateAPIKey(ctx, signed, identity.APIKeyOptions{Name: "pos", Scopes: []string{"pay:write"}})

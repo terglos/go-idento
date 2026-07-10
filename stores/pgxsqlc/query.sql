@@ -167,3 +167,29 @@ UPDATE identity_api_keys SET revoked_at = now() WHERE id = $1 AND revoked_at IS 
 
 -- name: TouchAPIKeyLastUsed :exec
 UPDATE identity_api_keys SET last_used_at = now() WHERE id = $1;
+
+-- name: CreateRefreshToken :exec
+INSERT INTO identity_refresh_tokens (session_id, user_id, token_hash, name, expires_at, created_at, last_used_at)
+VALUES ($1,$2,$3,$4,$5,$6,$7);
+
+-- name: GetRefreshTokenBySession :one
+SELECT session_id, user_id, token_hash, name, expires_at, created_at, last_used_at
+FROM identity_refresh_tokens WHERE session_id = $1;
+
+-- name: UpdateRefreshToken :execrows
+UPDATE identity_refresh_tokens
+SET token_hash = @token_hash, expires_at = @expires_at, last_used_at = @last_used_at, name = @name
+WHERE session_id = @session_id;
+
+-- name: DeleteRefreshToken :exec
+DELETE FROM identity_refresh_tokens WHERE session_id = $1;
+
+-- name: DeleteUserRefreshTokens :execrows
+DELETE FROM identity_refresh_tokens WHERE user_id = $1;
+
+-- name: DeleteExpiredRefreshTokens :execrows
+DELETE FROM identity_refresh_tokens WHERE expires_at < $1;
+
+-- name: ListUserRefreshTokens :many
+SELECT session_id, user_id, token_hash, name, expires_at, created_at, last_used_at
+FROM identity_refresh_tokens WHERE user_id = $1 ORDER BY created_at;

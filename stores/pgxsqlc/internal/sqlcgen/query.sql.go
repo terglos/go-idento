@@ -121,6 +121,34 @@ func (q *Queries) CreateAPIKey(ctx context.Context, arg CreateAPIKeyParams) erro
 	return err
 }
 
+const createRefreshToken = `-- name: CreateRefreshToken :exec
+INSERT INTO identity_refresh_tokens (session_id, user_id, token_hash, name, expires_at, created_at, last_used_at)
+VALUES ($1,$2,$3,$4,$5,$6,$7)
+`
+
+type CreateRefreshTokenParams struct {
+	SessionID  string
+	UserID     string
+	TokenHash  string
+	Name       string
+	ExpiresAt  time.Time
+	CreatedAt  time.Time
+	LastUsedAt *time.Time
+}
+
+func (q *Queries) CreateRefreshToken(ctx context.Context, arg CreateRefreshTokenParams) error {
+	_, err := q.db.Exec(ctx, createRefreshToken,
+		arg.SessionID,
+		arg.UserID,
+		arg.TokenHash,
+		arg.Name,
+		arg.ExpiresAt,
+		arg.CreatedAt,
+		arg.LastUsedAt,
+	)
+	return err
+}
+
 const createRole = `-- name: CreateRole :exec
 INSERT INTO identity_roles (id, name, normalized_name, concurrency_stamp)
 VALUES ($1,$2,$3,$4)
@@ -197,6 +225,27 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) error {
 	return err
 }
 
+const deleteExpiredRefreshTokens = `-- name: DeleteExpiredRefreshTokens :execrows
+DELETE FROM identity_refresh_tokens WHERE expires_at < $1
+`
+
+func (q *Queries) DeleteExpiredRefreshTokens(ctx context.Context, expiresAt time.Time) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteExpiredRefreshTokens, expiresAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteRefreshToken = `-- name: DeleteRefreshToken :exec
+DELETE FROM identity_refresh_tokens WHERE session_id = $1
+`
+
+func (q *Queries) DeleteRefreshToken(ctx context.Context, sessionID string) error {
+	_, err := q.db.Exec(ctx, deleteRefreshToken, sessionID)
+	return err
+}
+
 const deleteRole = `-- name: DeleteRole :exec
 DELETE FROM identity_roles WHERE id=$1
 `
@@ -245,6 +294,18 @@ func (q *Queries) DeleteUserClaim(ctx context.Context, arg DeleteUserClaimParams
 	return err
 }
 
+const deleteUserRefreshTokens = `-- name: DeleteUserRefreshTokens :execrows
+DELETE FROM identity_refresh_tokens WHERE user_id = $1
+`
+
+func (q *Queries) DeleteUserRefreshTokens(ctx context.Context, userID string) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteUserRefreshTokens, userID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteUserToken = `-- name: DeleteUserToken :exec
 DELETE FROM identity_user_tokens WHERE user_id=$1 AND login_provider=$2 AND name=$3
 `
@@ -280,6 +341,26 @@ func (q *Queries) GetActiveAPIKeyByHash(ctx context.Context, keyHash string) (Id
 		&i.LastUsedAt,
 		&i.RevokedAt,
 		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getRefreshTokenBySession = `-- name: GetRefreshTokenBySession :one
+SELECT session_id, user_id, token_hash, name, expires_at, created_at, last_used_at
+FROM identity_refresh_tokens WHERE session_id = $1
+`
+
+func (q *Queries) GetRefreshTokenBySession(ctx context.Context, sessionID string) (IdentityRefreshToken, error) {
+	row := q.db.QueryRow(ctx, getRefreshTokenBySession, sessionID)
+	var i IdentityRefreshToken
+	err := row.Scan(
+		&i.SessionID,
+		&i.UserID,
+		&i.TokenHash,
+		&i.Name,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.LastUsedAt,
 	)
 	return i, err
 }
@@ -727,6 +808,39 @@ func (q *Queries) ListAPIKeysByUser(ctx context.Context, userID string) ([]Ident
 	return items, nil
 }
 
+const listUserRefreshTokens = `-- name: ListUserRefreshTokens :many
+SELECT session_id, user_id, token_hash, name, expires_at, created_at, last_used_at
+FROM identity_refresh_tokens WHERE user_id = $1 ORDER BY created_at
+`
+
+func (q *Queries) ListUserRefreshTokens(ctx context.Context, userID string) ([]IdentityRefreshToken, error) {
+	rows, err := q.db.Query(ctx, listUserRefreshTokens, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []IdentityRefreshToken
+	for rows.Next() {
+		var i IdentityRefreshToken
+		if err := rows.Scan(
+			&i.SessionID,
+			&i.UserID,
+			&i.TokenHash,
+			&i.Name,
+			&i.ExpiresAt,
+			&i.CreatedAt,
+			&i.LastUsedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listUsers = `-- name: ListUsers :many
 SELECT id, user_name, normalized_user_name, email, normalized_email, email_confirmed, password_hash, security_stamp, concurrency_stamp, phone_number, phone_number_confirmed, two_factor_enabled, lockout_end, lockout_enabled, access_failed_count, attributes, is_anonymous, created_at, updated_at FROM identity_users
 WHERE $1::text = '' OR normalized_user_name LIKE '%' || $1 || '%'
@@ -849,6 +963,34 @@ UPDATE identity_api_keys SET last_used_at = now() WHERE id = $1
 func (q *Queries) TouchAPIKeyLastUsed(ctx context.Context, id string) error {
 	_, err := q.db.Exec(ctx, touchAPIKeyLastUsed, id)
 	return err
+}
+
+const updateRefreshToken = `-- name: UpdateRefreshToken :execrows
+UPDATE identity_refresh_tokens
+SET token_hash = $1, expires_at = $2, last_used_at = $3, name = $4
+WHERE session_id = $5
+`
+
+type UpdateRefreshTokenParams struct {
+	TokenHash  string
+	ExpiresAt  time.Time
+	LastUsedAt *time.Time
+	Name       string
+	SessionID  string
+}
+
+func (q *Queries) UpdateRefreshToken(ctx context.Context, arg UpdateRefreshTokenParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateRefreshToken,
+		arg.TokenHash,
+		arg.ExpiresAt,
+		arg.LastUsedAt,
+		arg.Name,
+		arg.SessionID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const updateRole = `-- name: UpdateRole :execrows

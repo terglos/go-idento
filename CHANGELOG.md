@@ -4,6 +4,43 @@ Notable changes per release. Versions follow [SemVer](https://semver.org). This
 is a multi-module repo; all modules (`.`, `stores/gormstore`, `stores/pgxstore`,
 `stores/pgxsqlc`) share the same version tag.
 
+## v0.6.0
+
+Multi-session refresh tokens — fixes the single-slot model that silently forced
+one session per account (a second login from another device/tab killed the
+previous session's refresh token). One row per session, the industry model
+(Duende PersistedGrants / OpenIddict tokens / the standard ASP.NET pattern).
+
+### Added
+- **`identity.RefreshToken`** entity (own `identity_refresh_tokens` table:
+  `session_id` PK, unique `token_hash`, FK `ON DELETE CASCADE`, indexed
+  `user_id`/`expires_at`), honoring `WithSchema`/`WithTablePrefix`/
+  `WithTableNames` (`TableNames.RefreshTokens`).
+- **`TokenService.WithSessionStore(store)`** enables multi-session: each
+  `IssuePair` creates its own session; the opaque token becomes
+  `<sessionID>.<secret>` (only the secret's hash is stored); `Refresh` rotates
+  within the token's own session (constant-time compare, per-session sliding
+  TTL) so other devices/tabs are untouched.
+- **`RevokeSession(ctx, u, refreshToken)`** — sign out one device;
+  **`Revoke(ctx, u)`** now ends every session; **`ListSessions(ctx, u)`** for a
+  "connected devices" panel. Opportunistic GC sweeps expired sessions on issue.
+- **`TokenOptions.MaxSessions`** (0 = unlimited): cap concurrent sessions with
+  oldest-evicted; `MaxSessions: 1` reproduces the previous single-session
+  behavior for those who want it.
+- `RefreshTokenStore` implemented in all four stores; sessions cascade when the
+  user is deleted/purged.
+
+### Compatibility
+- `IssuePair`/`Refresh` signatures unchanged; **without** `WithSessionStore`
+  the legacy single-slot behavior is untouched. Legacy tokens (no session id)
+  keep redeeming after enabling the store and are migrated to their own session
+  on first rotation.
+
+### Schema
+- New `identity_refresh_tokens` table in the pgx stores' `Migrate`, the
+  canonical `identity/migrations/postgres.sql`, and a versioned migration
+  (`migrations/20260617000001_refresh_sessions.sql`).
+
 ## v0.5.0
 
 First-class opaque API keys — long-lived machine-to-machine credentials for

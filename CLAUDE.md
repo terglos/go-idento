@@ -25,7 +25,7 @@ identity/              core (no DB dependency)
   signin_manager.go    SignInManagerOf[T,PT] + SignInResult
   guest.go             anonymous identity: CreateAnonymous / ConvertToRegistered / PurgeAnonymousUsers
   apikey.go            opaque API keys: APIKeyManagerOf + APIKeyStore (M2M bearer credentials)
-  token_service.go     TokenServiceOf[T,PT]: JWT access/refresh issue+validate
+  token_service.go     TokenServiceOf[T,PT]: JWT access/refresh issue+validate; WithSessionStore = multi-session refresh (one row/session)
   signer.go            Signer abstraction: HMAC (HS256) and RSAKeyring (RS256 + rotation)
   ecdsa_signer.go      ECDSAKeyring (ES256 + rotation)
   jwks.go              JWK/JWKSet + JWKS() on the RSA/ECDSA keyrings

@@ -27,27 +27,29 @@ func isValidIdentifier(s string) bool {
 // (including joins) stays consistent. Start from [DefaultTableNames] and tweak,
 // or use a store option such as WithTablePrefix / WithTableNames.
 type TableNames struct {
-	Users      string
-	Roles      string
-	UserRoles  string
-	UserClaims string
-	RoleClaims string
-	UserLogins string
-	UserTokens string
-	APIKeys    string
+	Users         string
+	Roles         string
+	UserRoles     string
+	UserClaims    string
+	RoleClaims    string
+	UserLogins    string
+	UserTokens    string
+	APIKeys       string
+	RefreshTokens string
 }
 
 // DefaultTableNames returns the canonical identity_* names.
 func DefaultTableNames() TableNames {
 	return TableNames{
-		Users:      "identity_users",
-		Roles:      "identity_roles",
-		UserRoles:  "identity_user_roles",
-		UserClaims: "identity_user_claims",
-		RoleClaims: "identity_role_claims",
-		UserLogins: "identity_user_logins",
-		UserTokens: "identity_user_tokens",
-		APIKeys:    "identity_api_keys",
+		Users:         "identity_users",
+		Roles:         "identity_roles",
+		UserRoles:     "identity_user_roles",
+		UserClaims:    "identity_user_claims",
+		RoleClaims:    "identity_role_claims",
+		UserLogins:    "identity_user_logins",
+		UserTokens:    "identity_user_tokens",
+		APIKeys:       "identity_api_keys",
+		RefreshTokens: "identity_refresh_tokens",
 	}
 }
 
@@ -56,14 +58,15 @@ func DefaultTableNames() TableNames {
 // full control.
 func (n TableNames) WithPrefix(prefix string) TableNames {
 	return TableNames{
-		Users:      prefix + n.Users,
-		Roles:      prefix + n.Roles,
-		UserRoles:  prefix + n.UserRoles,
-		UserClaims: prefix + n.UserClaims,
-		RoleClaims: prefix + n.RoleClaims,
-		UserLogins: prefix + n.UserLogins,
-		UserTokens: prefix + n.UserTokens,
-		APIKeys:    prefix + n.APIKeys,
+		Users:         prefix + n.Users,
+		Roles:         prefix + n.Roles,
+		UserRoles:     prefix + n.UserRoles,
+		UserClaims:    prefix + n.UserClaims,
+		RoleClaims:    prefix + n.RoleClaims,
+		UserLogins:    prefix + n.UserLogins,
+		UserTokens:    prefix + n.UserTokens,
+		APIKeys:       prefix + n.APIKeys,
+		RefreshTokens: prefix + n.RefreshTokens,
 	}
 }
 
@@ -90,7 +93,7 @@ func (n Naming) Validate() error {
 		"Users": n.Tables.Users, "Roles": n.Tables.Roles, "UserRoles": n.Tables.UserRoles,
 		"UserClaims": n.Tables.UserClaims, "RoleClaims": n.Tables.RoleClaims,
 		"UserLogins": n.Tables.UserLogins, "UserTokens": n.Tables.UserTokens,
-		"APIKeys": n.Tables.APIKeys,
+		"APIKeys": n.Tables.APIKeys, "RefreshTokens": n.Tables.RefreshTokens,
 	} {
 		if !isValidIdentifier(name) {
 			return fmt.Errorf("%w: table %s=%q", ErrInvalidIdentifier, label, name)

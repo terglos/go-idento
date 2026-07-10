@@ -10,7 +10,7 @@ management, password hashing, claims, lockout, two-factor and JWT, built on
 pluggable stores so the persistence layer can be swapped without touching
 business logic.
 
-> Status: beta (v0.5.0). User/role/sign-in managers, PBKDF2 hashing, JWT
+> Status: beta (v0.6.0). User/role/sign-in managers, PBKDF2 hashing, JWT
 > (HS256/RS256/ES256) + JWKS, TOTP/SMS two-factor with recovery codes, external
 > logins, email-confirmation/password-reset tokens, and policy authorization are
 > implemented and tested. Four stores ship: in-memory, GORM, raw `pgx`, and a
@@ -44,6 +44,7 @@ app and own your data. go-idento fills that gap with familiar building blocks �
 | API keys | `identity.APIKeyManager` — opaque M2M bearer credentials (create/verify/revoke/list, non-expiring, hash-stored) |
 | Two-factor | TOTP + SMS + recovery codes, pluggable `TwoFactorTokenProvider` |
 | Tokens | `identity.TokenService` (JWT access + refresh, HS256/RS256/ES256) |
+| Sessions | **multi-session refresh** via `WithSessionStore` — one token per device, per-session revoke, `MaxSessions` |
 | Delivery | `identity.SMSSender` / `identity.EmailSender` (provider-agnostic) |
 | Persistence | `identity.UserStore` / `identity.RoleStore` interfaces |
 | Password hashing | `identity.PasswordHasher` (PBKDF2, versioned format) |
@@ -160,6 +161,10 @@ EF `add-migration` loop. goose / golang-migrate can run the same SQL.
 - [x] User/role management (`UserManager`, `RoleManager`, `SignInManager`)
 - [x] PBKDF2 password hashing with a versioned wire format
 - [x] JWT access + refresh tokens with security-stamp revocation
+- [x] **Multi-session refresh tokens** (`TokenService.WithSessionStore`): one
+  refresh session per device/browser (industry model — one row per token),
+  per-session rotation + sliding TTL, `RevokeSession` / global `Revoke` /
+  `ListSessions`, opportunistic GC, optional `MaxSessions` cap
 - [x] HS256, **RS256 and ES256** signing via pluggable `Signer` + `RSAKeyring` / `ECDSAKeyring` (kid rotation)
 - [x] **JWKS endpoint** (`auth.JWKSHandler`) publishing RSA/EC public keys
 - [x] TOTP two-factor (RFC 6238) + one-time recovery codes

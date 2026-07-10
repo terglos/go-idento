@@ -22,6 +22,16 @@ type IdentityApiKey struct {
 	CreatedAt  time.Time
 }
 
+type IdentityRefreshToken struct {
+	SessionID  string
+	UserID     string
+	TokenHash  string
+	Name       string
+	ExpiresAt  time.Time
+	CreatedAt  time.Time
+	LastUsedAt *time.Time
+}
+
 type IdentityRole struct {
 	ID               string
 	Name             string

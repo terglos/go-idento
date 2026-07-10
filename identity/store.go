@@ -142,6 +142,28 @@ type APIKeyStore interface {
 	TouchAPIKeyLastUsed(ctx context.Context, id string) error
 }
 
+// RefreshTokenStore persists refresh sessions (see [RefreshToken]) — one row per
+// concurrent device/browser session, the industry model. Wire it into a
+// TokenService with [TokenServiceOf.WithSessionStore] to enable multi-session
+// refresh tokens; without it the service keeps the legacy single-slot behavior.
+type RefreshTokenStore interface {
+	CreateRefreshToken(ctx context.Context, rt *RefreshToken) error
+	// GetRefreshTokenBySession returns the session row or [ErrNotFound]; the
+	// caller (token service) does the constant-time hash comparison.
+	GetRefreshTokenBySession(ctx context.Context, sessionID string) (*RefreshToken, error)
+	// UpdateRefreshToken persists a rotation: same SessionID, new TokenHash,
+	// re-stamped ExpiresAt/LastUsedAt.
+	UpdateRefreshToken(ctx context.Context, rt *RefreshToken) error
+	// DeleteRefreshToken revokes one session; deleting a missing session is a no-op.
+	DeleteRefreshToken(ctx context.Context, sessionID string) error
+	// DeleteUserRefreshTokens revokes every session of a user (global sign-out).
+	DeleteUserRefreshTokens(ctx context.Context, userID string) (int64, error)
+	// DeleteExpiredRefreshTokens is the GC sweep for dormant sessions.
+	DeleteExpiredRefreshTokens(ctx context.Context, before time.Time) (int64, error)
+	// ListUserRefreshTokens returns a user's active sessions (metadata only).
+	ListUserRefreshTokens(ctx context.Context, userID string) ([]RefreshToken, error)
+}
+
 // AnonymousPurger is an OPTIONAL capability: bulk-delete guest (anonymous) users
 // created before a cutoff, cascading their satellite rows — the GC sweep behind
 // [UserManagerOf.PurgeAnonymousUsers]. Stores that don't implement it cause the

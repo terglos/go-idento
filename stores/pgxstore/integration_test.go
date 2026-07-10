@@ -27,13 +27,18 @@ func TestPgxIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("connect: %v", err)
 	}
-	defer pool.Close()
+	t.Cleanup(pool.Close) // registered first: cleanups run LIFO, so Close goes last
 	if err := pgxstore.Migrate(ctx, pool); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
 	truncate := func() {
-		_, _ = pool.Exec(ctx, `TRUNCATE identity_users, identity_roles, identity_user_roles,
-			identity_user_claims, identity_role_claims, identity_user_logins, identity_user_tokens`)
+		// CASCADE so FK-referencing tables (api_keys, refresh_tokens) don't block
+		// the sweep, and fail loudly if the cleanup itself breaks.
+		if _, err := pool.Exec(ctx, `TRUNCATE identity_users, identity_roles, identity_user_roles,
+			identity_user_claims, identity_role_claims, identity_user_logins, identity_user_tokens,
+			identity_api_keys, identity_refresh_tokens CASCADE`); err != nil {
+			t.Fatalf("truncate: %v", err)
+		}
 	}
 	truncate() // start clean even if a previous run left data behind
 	t.Cleanup(truncate)
@@ -145,6 +150,34 @@ func TestPgxIntegration(t *testing.T) {
 	}
 	if got, _ := um.FindByID(ctx, fresh.ID); got == nil {
 		t.Fatal("fresh guest should remain")
+	}
+
+	// Multi-session refresh tokens against real Postgres: two sessions coexist,
+	// per-session revoke keeps the other, global revoke kills all.
+	mts := identity.NewTokenService(um, identity.DefaultTokenOptions([]byte("pg-sessions-key-00000000000000000"), "go-idento", "api")).
+		WithSessionStore(pgxstore.NewRefreshTokenStore(pool))
+	sessA, err := mts.IssuePair(ctx, signed)
+	if err != nil {
+		t.Fatalf("session A: %v", err)
+	}
+	sessB, err := mts.IssuePair(ctx, signed)
+	if err != nil {
+		t.Fatalf("session B: %v", err)
+	}
+	if _, err := mts.Refresh(ctx, signed, sessA.RefreshToken); err != nil {
+		t.Fatalf("session A must survive B's login: %v", err)
+	}
+	if err := mts.RevokeSession(ctx, signed, sessB.RefreshToken); err != nil {
+		t.Fatalf("RevokeSession: %v", err)
+	}
+	if _, err := mts.Refresh(ctx, signed, sessB.RefreshToken); err == nil {
+		t.Fatal("revoked session B must not refresh")
+	}
+	if err := mts.Revoke(ctx, signed); err != nil {
+		t.Fatalf("global revoke: %v", err)
+	}
+	if sessions, _ := mts.ListSessions(ctx, signed); len(sessions) != 0 {
+		t.Fatalf("no sessions after global revoke, got %d", len(sessions))
 	}
 
 	// API keys against real Postgres: create, verify (owner+scopes), revoke.

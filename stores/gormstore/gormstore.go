@@ -50,19 +50,20 @@ func resolve(opts ...Option) identity.Naming {
 
 // tables holds the resolved (schema-qualified) physical table names.
 type tables struct {
-	users, roles, userRoles, userClaims, roleClaims, userLogins, userTokens, apiKeys string
+	users, roles, userRoles, userClaims, roleClaims, userLogins, userTokens, apiKeys, refreshTokens string
 }
 
 func resolveTables(n identity.Naming) tables {
 	return tables{
-		users:      n.Qualify(n.Tables.Users),
-		roles:      n.Qualify(n.Tables.Roles),
-		userRoles:  n.Qualify(n.Tables.UserRoles),
-		userClaims: n.Qualify(n.Tables.UserClaims),
-		roleClaims: n.Qualify(n.Tables.RoleClaims),
-		userLogins: n.Qualify(n.Tables.UserLogins),
-		userTokens: n.Qualify(n.Tables.UserTokens),
-		apiKeys:    n.Qualify(n.Tables.APIKeys),
+		users:         n.Qualify(n.Tables.Users),
+		roles:         n.Qualify(n.Tables.Roles),
+		userRoles:     n.Qualify(n.Tables.UserRoles),
+		userClaims:    n.Qualify(n.Tables.UserClaims),
+		roleClaims:    n.Qualify(n.Tables.RoleClaims),
+		userLogins:    n.Qualify(n.Tables.UserLogins),
+		userTokens:    n.Qualify(n.Tables.UserTokens),
+		apiKeys:       n.Qualify(n.Tables.APIKeys),
+		refreshTokens: n.Qualify(n.Tables.RefreshTokens),
 	}
 }
 
@@ -71,7 +72,7 @@ func resolveTables(n identity.Naming) tables {
 // off or absent).
 func (t tables) deleteUserCascade(db *gorm.DB, userID string) error {
 	return db.Transaction(func(tx *gorm.DB) error {
-		for _, table := range []string{t.userRoles, t.userClaims, t.userLogins, t.userTokens, t.apiKeys} {
+		for _, table := range []string{t.userRoles, t.userClaims, t.userLogins, t.userTokens, t.apiKeys, t.refreshTokens} {
 			if err := tx.Exec(fmt.Sprintf("DELETE FROM %s WHERE user_id = ?", table), userID).Error; err != nil {
 				return err
 			}
@@ -143,7 +144,7 @@ func Migrate(db *gorm.DB, opts ...Option) error {
 		{t.users, &identity.User{}}, {t.roles, &identity.Role{}}, {t.userRoles, &identity.UserRole{}},
 		{t.userClaims, &identity.UserClaim{}}, {t.roleClaims, &identity.RoleClaim{}},
 		{t.userLogins, &identity.UserLogin{}}, {t.userTokens, &identity.UserToken{}},
-		{t.apiKeys, &identity.APIKey{}},
+		{t.apiKeys, &identity.APIKey{}}, {t.refreshTokens, &identity.RefreshToken{}},
 	}
 	for _, s := range steps {
 		if err := db.Table(s.name).AutoMigrate(s.model); err != nil {
