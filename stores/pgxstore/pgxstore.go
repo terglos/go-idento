@@ -181,11 +181,22 @@ func scanUser(row pgx.Row) (*identity.User, error) {
 	return &u, nil
 }
 
-func marshalAttrs(a identity.Attributes) ([]byte, error) {
+// marshalAttrs renders attributes for the jsonb column. It returns a string,
+// not []byte, on purpose: pgx binds []byte as bytea, and in the query exec
+// modes that send parameters untyped — QueryExecModeExec and
+// QueryExecModeSimpleProtocol, the two that are safe behind a transaction
+// pooler like PgBouncer — the server then rejects it with "invalid input
+// syntax for type json". pgx's own documentation says json/jsonb parameters
+// must be passed as string in those modes. A string works in every mode.
+func marshalAttrs(a identity.Attributes) (string, error) {
 	if a == nil {
-		return []byte("{}"), nil
+		return "{}", nil
 	}
-	return json.Marshal(a)
+	b, err := json.Marshal(a)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
 }
 
 // --- UserStore ---

@@ -44,10 +44,13 @@ func NewAPIKeyStore(db *pgxpool.Pool, opts ...Option) *APIKeyStore {
 }
 
 func (s *APIKeyStore) CreateAPIKey(ctx context.Context, k *identity.APIKey) error {
-	scopes, err := json.Marshal(k.Scopes)
+	// string, not []byte — see marshalAttrs: pgx binds []byte as bytea, which
+	// a jsonb column rejects in the untyped exec modes used behind a pooler.
+	scopesJSON, err := json.Marshal(k.Scopes)
 	if err != nil {
 		return err
 	}
+	scopes := string(scopesJSON)
 	created := k.CreatedAt
 	if created.IsZero() {
 		created = time.Now()
