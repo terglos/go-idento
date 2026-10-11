@@ -193,3 +193,72 @@ DELETE FROM identity_refresh_tokens WHERE expires_at < $1;
 -- name: ListUserRefreshTokens :many
 SELECT session_id, user_id, token_hash, name, expires_at, created_at, last_used_at
 FROM identity_refresh_tokens WHERE user_id = $1 ORDER BY created_at;
+
+-- name: CreateOAuthClient :exec
+INSERT INTO identity_oauth_clients (client_id, secret_hash, name, redirect_uris, token_endpoint_auth_method, grant_types, created_at, last_used_at)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8);
+
+-- name: GetOAuthClient :one
+SELECT client_id, secret_hash, name, redirect_uris, token_endpoint_auth_method, grant_types, created_at, last_used_at
+FROM identity_oauth_clients WHERE client_id = $1;
+
+-- name: TouchOAuthClient :exec
+UPDATE identity_oauth_clients SET last_used_at = $2 WHERE client_id = $1;
+
+-- name: DeleteStaleOAuthClients :execrows
+DELETE FROM identity_oauth_clients c
+WHERE c.created_at < @before AND (c.last_used_at IS NULL OR c.last_used_at < @before)
+  AND NOT EXISTS (SELECT 1 FROM identity_oauth_grants g WHERE g.client_id = c.client_id);
+
+-- name: CreateOAuthCode :exec
+INSERT INTO identity_oauth_codes (code_hash, client_id, user_id, redirect_uri, scopes, resource, code_challenge, expires_at, used_at, grant_id)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10);
+
+-- name: GetOAuthCode :one
+SELECT code_hash, client_id, user_id, redirect_uri, scopes, resource, code_challenge, expires_at, used_at, grant_id
+FROM identity_oauth_codes WHERE code_hash = $1;
+
+-- name: MarkOAuthCodeUsed :execrows
+UPDATE identity_oauth_codes SET used_at = @used_at, grant_id = @grant_id
+WHERE code_hash = @code_hash AND used_at IS NULL;
+
+-- name: DeleteExpiredOAuthCodes :execrows
+DELETE FROM identity_oauth_codes WHERE expires_at < $1;
+
+-- name: GetOAuthConsent :one
+SELECT user_id, client_id, scopes, created_at, updated_at
+FROM identity_oauth_consents WHERE user_id = $1 AND client_id = $2;
+
+-- name: SaveOAuthConsent :exec
+INSERT INTO identity_oauth_consents (user_id, client_id, scopes, created_at, updated_at)
+VALUES ($1,$2,$3,$4,$5)
+ON CONFLICT (user_id, client_id) DO UPDATE SET scopes = EXCLUDED.scopes, updated_at = EXCLUDED.updated_at;
+
+-- name: DeleteOAuthConsent :exec
+DELETE FROM identity_oauth_consents WHERE user_id = $1 AND client_id = $2;
+
+-- name: CreateOAuthGrant :exec
+INSERT INTO identity_oauth_grants (id, user_id, client_id, scopes, resource, token_hash, prev_token_hash, security_stamp, expires_at, created_at, last_used_at)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11);
+
+-- name: GetOAuthGrant :one
+SELECT id, user_id, client_id, scopes, resource, token_hash, prev_token_hash, security_stamp, expires_at, created_at, last_used_at
+FROM identity_oauth_grants WHERE id = $1;
+
+-- name: RotateOAuthGrant :execrows
+UPDATE identity_oauth_grants
+SET prev_token_hash = token_hash, token_hash = @new_hash, expires_at = @expires_at, last_used_at = @last_used_at
+WHERE id = @id AND token_hash = @old_hash;
+
+-- name: DeleteOAuthGrant :exec
+DELETE FROM identity_oauth_grants WHERE id = $1;
+
+-- name: DeleteUserClientOAuthGrants :execrows
+DELETE FROM identity_oauth_grants WHERE user_id = $1 AND client_id = $2;
+
+-- name: ListUserOAuthGrants :many
+SELECT id, user_id, client_id, scopes, resource, token_hash, prev_token_hash, security_stamp, expires_at, created_at, last_used_at
+FROM identity_oauth_grants WHERE user_id = $1 ORDER BY created_at;
+
+-- name: DeleteExpiredOAuthGrants :execrows
+DELETE FROM identity_oauth_grants WHERE expires_at < $1;

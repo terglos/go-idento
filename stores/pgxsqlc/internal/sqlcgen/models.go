@@ -22,6 +22,52 @@ type IdentityApiKey struct {
 	CreatedAt  time.Time
 }
 
+type IdentityOauthClient struct {
+	ClientID                string
+	SecretHash              string
+	Name                    string
+	RedirectUris            string
+	TokenEndpointAuthMethod string
+	GrantTypes              string
+	CreatedAt               time.Time
+	LastUsedAt              *time.Time
+}
+
+type IdentityOauthCode struct {
+	CodeHash      string
+	ClientID      string
+	UserID        string
+	RedirectUri   string
+	Scopes        string
+	Resource      string
+	CodeChallenge string
+	ExpiresAt     time.Time
+	UsedAt        *time.Time
+	GrantID       string
+}
+
+type IdentityOauthConsent struct {
+	UserID    string
+	ClientID  string
+	Scopes    string
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+type IdentityOauthGrant struct {
+	ID            string
+	UserID        string
+	ClientID      string
+	Scopes        string
+	Resource      string
+	TokenHash     string
+	PrevTokenHash string
+	SecurityStamp string
+	ExpiresAt     time.Time
+	CreatedAt     time.Time
+	LastUsedAt    *time.Time
+}
+
 type IdentityRefreshToken struct {
 	SessionID  string
 	UserID     string

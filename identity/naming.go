@@ -36,6 +36,10 @@ type TableNames struct {
 	UserTokens    string
 	APIKeys       string
 	RefreshTokens string
+	OAuthClients  string
+	OAuthCodes    string
+	OAuthConsents string
+	OAuthGrants   string
 }
 
 // DefaultTableNames returns the canonical identity_* names.
@@ -50,6 +54,10 @@ func DefaultTableNames() TableNames {
 		UserTokens:    "identity_user_tokens",
 		APIKeys:       "identity_api_keys",
 		RefreshTokens: "identity_refresh_tokens",
+		OAuthClients:  "identity_oauth_clients",
+		OAuthCodes:    "identity_oauth_codes",
+		OAuthConsents: "identity_oauth_consents",
+		OAuthGrants:   "identity_oauth_grants",
 	}
 }
 
@@ -67,6 +75,10 @@ func (n TableNames) WithPrefix(prefix string) TableNames {
 		UserTokens:    prefix + n.UserTokens,
 		APIKeys:       prefix + n.APIKeys,
 		RefreshTokens: prefix + n.RefreshTokens,
+		OAuthClients:  prefix + n.OAuthClients,
+		OAuthCodes:    prefix + n.OAuthCodes,
+		OAuthConsents: prefix + n.OAuthConsents,
+		OAuthGrants:   prefix + n.OAuthGrants,
 	}
 }
 
@@ -94,6 +106,8 @@ func (n Naming) Validate() error {
 		"UserClaims": n.Tables.UserClaims, "RoleClaims": n.Tables.RoleClaims,
 		"UserLogins": n.Tables.UserLogins, "UserTokens": n.Tables.UserTokens,
 		"APIKeys": n.Tables.APIKeys, "RefreshTokens": n.Tables.RefreshTokens,
+		"OAuthClients": n.Tables.OAuthClients, "OAuthCodes": n.Tables.OAuthCodes,
+		"OAuthConsents": n.Tables.OAuthConsents, "OAuthGrants": n.Tables.OAuthGrants,
 	} {
 		if !isValidIdentifier(name) {
 			return fmt.Errorf("%w: table %s=%q", ErrInvalidIdentifier, label, name)

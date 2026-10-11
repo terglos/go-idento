@@ -50,7 +50,7 @@ func TestUntypedExecModes(t *testing.T) {
 			if err != nil {
 				t.Fatalf("connect: %v", err)
 			}
-			defer pool.Close()
+			t.Cleanup(pool.Close) // registered first, so it runs after the row cleanups below
 			if err := pgxstore.Migrate(ctx, pool); err != nil {
 				t.Fatalf("migrate: %v", err)
 			}

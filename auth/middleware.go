@@ -26,6 +26,11 @@ type Principal struct {
 	Scopes []string
 	// ViaAPIKey is true when the request authenticated with an API key.
 	ViaAPIKey bool
+	// ViaOAuth is true when the request authenticated with an OAuth access token
+	// (see WithOAuthResource); ClientID is the OAuth client that obtained it and
+	// Scopes holds the granted scopes.
+	ViaOAuth bool
+	ClientID string
 }
 
 // HasRole reports role membership for [RequireRole].
@@ -38,8 +43,9 @@ func (p *Principal) HasRole(role string) bool {
 	return false
 }
 
-// HasScope reports whether the principal's API key carries the given scope
-// (always false for non-API-key auth or a key without scopes).
+// HasScope reports whether the principal carries the given scope — the API
+// key's scopes or the OAuth token's granted scopes (always false for app
+// session auth).
 func (p *Principal) HasScope(scope string) bool {
 	for _, s := range p.Scopes {
 		if s == scope {
@@ -60,7 +66,23 @@ func PrincipalFrom(ctx context.Context) (*Principal, bool) {
 type Option func(*middlewareConfig)
 
 type middlewareConfig struct {
-	keys *identity.APIKeyManager
+	keys          *identity.APIKeyManager
+	oauth         OAuthTokenValidator
+	oauthResource string
+}
+
+// OAuthTokenValidator validates OAuth access tokens issued for a resource. The
+// oauth package's *Server implements it.
+type OAuthTokenValidator interface {
+	ValidateResourceToken(ctx context.Context, token, resource string) (*identity.User, jwt.MapClaims, error)
+}
+
+// WithOAuthResource accepts OAuth access tokens issued for resource (the RFC 8707
+// audience, e.g. "https://api.example.com/v1/mcp") on the Bearer header,
+// producing a Principal with ViaOAuth, ClientID and the granted Scopes.
+// Precedence: app session JWT, then OAuth token, then API key.
+func WithOAuthResource(v OAuthTokenValidator, resource string) Option {
+	return func(c *middlewareConfig) { c.oauth, c.oauthResource = v, resource }
 }
 
 // WithAPIKeys enables opaque API-key authentication: a Bearer value that isn't a
@@ -103,6 +125,15 @@ func authenticate(r *http.Request, tokens *identity.TokenService, cookies *Cooki
 	if tokens != nil {
 		if u, claims, err := tokens.ValidateAccessToken(r.Context(), token); err == nil {
 			return &Principal{User: u, Claims: claims, Roles: rolesFromClaims(claims)}
+		}
+	}
+	// Then an OAuth access token for the configured resource (Bearer only).
+	if cfg.oauth != nil && !fromCookie {
+		if u, claims, err := cfg.oauth.ValidateResourceToken(r.Context(), token, cfg.oauthResource); err == nil {
+			clientID, _ := claims["client_id"].(string)
+			scope, _ := claims["scope"].(string)
+			return &Principal{User: u, Claims: claims, Roles: rolesFromClaims(claims),
+				Scopes: strings.Fields(scope), ViaOAuth: true, ClientID: clientID}
 		}
 	}
 	// Fall back to an API key for a Bearer value that isn't a valid JWT. Cookie

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/terglos/go-idento/identity"
+	"github.com/terglos/go-idento/oauth"
 )
 
 // Store backs both a UserStore and a RoleStore from the same data, so users and
@@ -28,6 +29,10 @@ type Store struct {
 	loginUser     map[string]string                 // provider|key -> userID
 	apiKeys       map[string]*identity.APIKey       // by ID
 	refreshTokens map[string]*identity.RefreshToken // by SessionID
+	oauthClients  map[string]*oauth.Client          // by client_id
+	oauthCodes    map[string]*oauth.Code            // by code hash
+	oauthConsents map[string]*oauth.Consent         // by user|client
+	oauthGrants   map[string]*oauth.Grant           // by grant id
 }
 
 func New() *Store {
@@ -42,6 +47,10 @@ func New() *Store {
 		loginUser:     map[string]string{},
 		apiKeys:       map[string]*identity.APIKey{},
 		refreshTokens: map[string]*identity.RefreshToken{},
+		oauthClients:  map[string]*oauth.Client{},
+		oauthCodes:    map[string]*oauth.Code{},
+		oauthConsents: map[string]*oauth.Consent{},
+		oauthGrants:   map[string]*oauth.Grant{},
 	}
 }
 
@@ -134,6 +143,21 @@ func (s *userStore) cascadeDeleteLocked(id string) {
 	for sid, rt := range s.refreshTokens {
 		if rt.UserID == id {
 			delete(s.refreshTokens, sid)
+		}
+	}
+	for h, c := range s.oauthCodes {
+		if c.UserID == id {
+			delete(s.oauthCodes, h)
+		}
+	}
+	for k, c := range s.oauthConsents {
+		if c.UserID == id {
+			delete(s.oauthConsents, k)
+		}
+	}
+	for gid, g := range s.oauthGrants {
+		if g.UserID == id {
+			delete(s.oauthGrants, gid)
 		}
 	}
 }

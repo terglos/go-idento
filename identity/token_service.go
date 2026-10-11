@@ -52,6 +52,16 @@ func (o TokenOptions) signer() Signer {
 	return NewHMACSigner(o.SigningKey)
 }
 
+// ResolvedSigner returns the effective signer (the explicit Signer, else HS256
+// over SigningKey) so companion packages such as oauth can sign and verify with
+// the same keys — and publish them through the same JWKS.
+func (o TokenOptions) ResolvedSigner() Signer { return o.signer() }
+
+// TokenTypeAccessJWT is the JOSE "typ" of OAuth access tokens (RFC 9068). Session
+// tokens never carry it, and ValidateAccessToken rejects it, so a token minted
+// for an OAuth resource can't be replayed as an app session token.
+const TokenTypeAccessJWT = "at+jwt"
+
 // DefaultTokenOptions returns 15-minute access tokens and 7-day refresh tokens.
 func DefaultTokenOptions(signingKey []byte, issuer, audience string) TokenOptions {
 	return TokenOptions{
@@ -269,6 +279,9 @@ func (t *TokenServiceOf[T, PT]) ValidateAccessToken(ctx context.Context, tokenSt
 		jwt.WithIssuer(t.Options.Issuer), jwt.WithAudience(t.Options.Audience))
 	if err != nil || !parsed.Valid {
 		return nil, nil, ErrInvalidToken
+	}
+	if typ, _ := parsed.Header["typ"].(string); strings.EqualFold(typ, TokenTypeAccessJWT) {
+		return nil, nil, ErrInvalidToken // OAuth resource token, not a session token
 	}
 	claims, ok := parsed.Claims.(jwt.MapClaims)
 	if !ok {

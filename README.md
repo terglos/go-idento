@@ -10,10 +10,11 @@ management, password hashing, claims, lockout, two-factor and JWT, built on
 pluggable stores so the persistence layer can be swapped without touching
 business logic.
 
-> Status: beta (v0.6.0). User/role/sign-in managers, PBKDF2 hashing, JWT
+> Status: beta (v0.7.0). User/role/sign-in managers, PBKDF2 hashing, JWT
 > (HS256/RS256/ES256) + JWKS, TOTP/SMS two-factor with recovery codes, external
-> logins, email-confirmation/password-reset tokens, and policy authorization are
-> implemented and tested. Four stores ship: in-memory, GORM, raw `pgx`, and a
+> logins, email-confirmation/password-reset tokens, policy authorization, API
+> keys, multi-session refresh and an embedded OAuth 2.1 authorization server
+> (MCP connectors) are implemented and tested. Four stores ship: in-memory, GORM, raw `pgx`, and a
 > `sqlc`-generated `pgx` store — with configurable schema/table names and
 > referential integrity (cascade delete + optimistic concurrency). The API may
 > still change before v1.0.
@@ -22,6 +23,7 @@ business logic.
 [architecture](docs/architecture.md) ·
 [extending the user & migrations](docs/design/extending-user-and-migrations.md) ·
 [customizing the schema](docs/customizing-schema.md) ·
+[OAuth 2.1 server / MCP](docs/oauth-server.md) ·
 [contributor/agent guide](CLAUDE.md)
 
 ## Why
@@ -45,6 +47,7 @@ app and own your data. go-idento fills that gap with familiar building blocks �
 | Two-factor | TOTP + SMS + recovery codes, pluggable `TwoFactorTokenProvider` |
 | Tokens | `identity.TokenService` (JWT access + refresh, HS256/RS256/ES256) |
 | Sessions | **multi-session refresh** via `WithSessionStore` — one token per device, per-session revoke, `MaxSessions` |
+| OAuth server | `oauth.Server` — embedded OAuth 2.1 AS for MCP connectors (PKCE, DCR, CIMD, RFC 8414/9728/8707/7009), `auth.WithOAuthResource` |
 | Delivery | `identity.SMSSender` / `identity.EmailSender` (provider-agnostic) |
 | Persistence | `identity.UserStore` / `identity.RoleStore` interfaces |
 | Password hashing | `identity.PasswordHasher` (PBKDF2, versioned format) |
@@ -93,7 +96,7 @@ you opt into:
 
 | Module | Import | Extra deps |
 |---|---|---|
-| core | `github.com/terglos/go-idento` (+`/auth`, `/stores/memstore`) | jwt, uuid, x/crypto |
+| core | `github.com/terglos/go-idento` (+`/auth`, `/oauth`, `/stores/memstore`) | jwt, uuid, x/crypto |
 | GORM store | `github.com/terglos/go-idento/stores/gormstore` | gorm, drivers |
 | pgx store | `github.com/terglos/go-idento/stores/pgxstore` | pgx |
 | sqlc store | `github.com/terglos/go-idento/stores/pgxsqlc` | pgx |
@@ -103,11 +106,13 @@ you opt into:
 ```
 identity/          core: entities, managers, hasher, options, JWT, signer/JWKS
 auth/              HTTP middleware: Bearer + cookie, RequireAuth/RequireRole/RequirePolicy, JWKS
+oauth/             embedded OAuth 2.1 authorization server (MCP connectors) + oauthtest suites
 stores/memstore/   in-memory implementation (tests / prototyping) — in the core module
 stores/gormstore/  [module] GORM (Postgres / MySQL / SQLite) + examples
 stores/pgxstore/   [module] raw pgx (PostgreSQL) + demo
 stores/pgxsqlc/    [module] sqlc-generated pgx (PostgreSQL)
 demo/totp/         TOTP code helper (core only)
+demo/mcpoauth/     MCP server behind the OAuth 2.1 server, lazy auth (core only)
 ```
 
 ## Extending the user
@@ -155,6 +160,9 @@ EF `add-migration` loop. goose / golang-migrate can run the same SQL.
   then follow its README (register, login, JWT + cookie, refresh, role-gated route, TOTP 2FA).
 - [`stores/gormstore/examples/httpserver`](stores/gormstore/examples/httpserver) — minimal
   zero-setup server on SQLite: `cd stores/gormstore && go run ./examples/httpserver`.
+- [`demo/mcpoauth`](demo/mcpoauth) — an MCP server protected by the embedded
+  OAuth 2.1 server with lazy auth (public + protected tool): `go run ./demo/mcpoauth`,
+  then connect MCP Inspector or Claude Code to `http://localhost:8091/mcp`.
 
 ## Features
 
@@ -175,6 +183,13 @@ EF `add-migration` loop. goose / golang-migrate can run the same SQL.
   hash-stored bearer credentials bound to a user — `CreateAPIKey` /
   `VerifyAPIKey` / `RevokeAPIKey` / `ListAPIKeys`, configurable prefix + hasher,
   `ImportAPIKey` for zero-reissue migration, and `auth.WithAPIKeys` middleware
+- [x] **Embedded OAuth 2.1 authorization server** (`oauth.Server`) for MCP
+  connectors (Claude, ChatGPT) and other third-party clients: PKCE S256,
+  RFC 8414 / RFC 9728 metadata, RFC 8707 audience-bound `at+jwt` tokens, DCR
+  (RFC 7591) + CIMD (SSRF-hardened), loopback redirects (RFC 8252), refresh
+  rotation with reuse detection, revocation (RFC 7009), app-owned
+  login/consent, connected-apps API, GC, `auth.WithOAuthResource` +
+  `oauth.Challenge` for lazy 401 auth ([guide](docs/oauth-server.md))
 - [x] **Guest / anonymous identity**: `CreateAnonymous`, `ConvertToRegistered`
   (promote in place, preserving the ID), and a `PurgeAnonymousUsers` GC sweep
 - [x] Account lockout
@@ -252,6 +267,25 @@ Migrating from an existing key system? Point the hasher at your current function
 and `ImportAPIKey(userID, name, prefix, keyHash, expiresAt, scopes...)` your
 already-issued hashes — every key stays valid with zero reissue.
 
+### OAuth 2.1 server for MCP connectors
+
+```go
+srv, _ := oauth.NewServer(users, tokens, gormstore.NewOAuthStore(db), oauth.Options{
+    Issuer: "https://api.example.com", Resources: []string{"https://api.example.com/mcp"},
+    Scopes: []string{"mcp:read"}, AllowDCR: true, AllowCIMD: true,
+    CurrentUser: sessionUserID,                                     // who is signed in
+    LoginURL:    func(r *http.Request, back string) string { return "/login?return_to=" + url.QueryEscape(back) },
+})
+srv.Routes(mux) // RFC 8414 metadata + /oauth/authorize, /token, /revoke, /register
+
+metaURL, _ := oauth.ResourceMetadataURL("https://api.example.com/mcp") // RFC 9728 (serve with ProtectedResourceHandler)
+mux.Handle("/mcp", auth.Middleware(tokens, cookies,
+    auth.WithOAuthResource(srv, "https://api.example.com/mcp"))(mcp))
+// in a protected tool, without a token: oauth.Challenge(w, metaURL, "mcp:read") -> 401 starts the flow
+```
+
+Full guide: [docs/oauth-server.md](docs/oauth-server.md).
+
 ### JWKS endpoint
 
 ```go
@@ -271,6 +305,7 @@ res := signIn.TwoFactorPhoneSignIn(ctx, u, code)   // after PasswordSignIn retur
 
 - [ ] WebAuthn / passkeys
 - [ ] Backchannel logout / token introspection endpoint
+- [ ] OpenID Connect provider (ID tokens, discovery, userinfo) on top of `oauth`
 
 ## License
 

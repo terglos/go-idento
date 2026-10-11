@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/terglos/go-idento/identity"
+	"github.com/terglos/go-idento/oauth"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -51,6 +52,7 @@ func resolve(opts ...Option) identity.Naming {
 // tables holds the resolved (schema-qualified) physical table names.
 type tables struct {
 	users, roles, userRoles, userClaims, roleClaims, userLogins, userTokens, apiKeys, refreshTokens string
+	oauthClients, oauthCodes, oauthConsents, oauthGrants                                            string
 }
 
 func resolveTables(n identity.Naming) tables {
@@ -64,6 +66,10 @@ func resolveTables(n identity.Naming) tables {
 		userTokens:    n.Qualify(n.Tables.UserTokens),
 		apiKeys:       n.Qualify(n.Tables.APIKeys),
 		refreshTokens: n.Qualify(n.Tables.RefreshTokens),
+		oauthClients:  n.Qualify(n.Tables.OAuthClients),
+		oauthCodes:    n.Qualify(n.Tables.OAuthCodes),
+		oauthConsents: n.Qualify(n.Tables.OAuthConsents),
+		oauthGrants:   n.Qualify(n.Tables.OAuthGrants),
 	}
 }
 
@@ -72,7 +78,8 @@ func resolveTables(n identity.Naming) tables {
 // off or absent).
 func (t tables) deleteUserCascade(db *gorm.DB, userID string) error {
 	return db.Transaction(func(tx *gorm.DB) error {
-		for _, table := range []string{t.userRoles, t.userClaims, t.userLogins, t.userTokens, t.apiKeys, t.refreshTokens} {
+		for _, table := range []string{t.userRoles, t.userClaims, t.userLogins, t.userTokens, t.apiKeys, t.refreshTokens,
+			t.oauthCodes, t.oauthConsents, t.oauthGrants} {
 			if err := tx.Exec(fmt.Sprintf("DELETE FROM %s WHERE user_id = ?", table), userID).Error; err != nil {
 				return err
 			}
@@ -145,6 +152,8 @@ func Migrate(db *gorm.DB, opts ...Option) error {
 		{t.userClaims, &identity.UserClaim{}}, {t.roleClaims, &identity.RoleClaim{}},
 		{t.userLogins, &identity.UserLogin{}}, {t.userTokens, &identity.UserToken{}},
 		{t.apiKeys, &identity.APIKey{}}, {t.refreshTokens, &identity.RefreshToken{}},
+		{t.oauthClients, &oauth.Client{}}, {t.oauthCodes, &oauth.Code{}},
+		{t.oauthConsents, &oauth.Consent{}}, {t.oauthGrants, &oauth.Grant{}},
 	}
 	for _, s := range steps {
 		if err := db.Table(s.name).AutoMigrate(s.model); err != nil {

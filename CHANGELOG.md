@@ -4,6 +4,71 @@ Notable changes per release. Versions follow [SemVer](https://semver.org). This
 is a multi-module repo; all modules (`.`, `stores/gormstore`, `stores/pgxstore`,
 `stores/pgxsqlc`) share the same version tag.
 
+## v0.7.0
+
+Embedded **OAuth 2.1 authorization server** (new package `oauth`) so apps can
+expose their API to MCP connectors (Claude, ChatGPT) and other third-party
+clients with per-user, audience-bound tokens — the profile required by the MCP
+authorization spec. Guide: [docs/oauth-server.md](docs/oauth-server.md).
+
+### Added
+- **`oauth.NewServer(users, tokens, store, Options)`** (validates config) with
+  `Routes(mux)`:
+  - authorization code + **PKCE S256 only**; RFC 9207 `iss` in the response;
+    duplicated parameters rejected; app-owned login (`CurrentUser`, `LoginURL`)
+    and consent (`RenderConsent`, default page included) with HMAC CSRF and
+    remembered per-client consent;
+  - token endpoint: code exchange and **refresh rotation with reuse detection**
+    (replay revokes the grant; optional `RefreshReuseGrace`); every failure is
+    `invalid_grant`; `RequireOfflineAccess` option; confidential and public
+    clients;
+  - **RFC 8414** metadata (incl. issuer-path form), **RFC 7009** revocation,
+    **RFC 7591** DCR (rate-limited per IP), **CIMD** URL client_ids
+    (dial-time private-IP blocking, no redirects, size/time limits, bounded
+    cache), **RFC 8252** loopback redirects on any port;
+  - CORS on metadata/token/register/revoke for browser clients.
+- **Access tokens**: `typ: at+jwt` JWTs signed by the existing `TokenService`
+  signer (JWKS unchanged), `aud` = **RFC 8707** resource, carrying `client_id`,
+  `scope`, `gid` (grant) and `idn_sstamp`. `ValidateResourceToken` also checks
+  the grant still exists (immediate revocation), security stamp and lockout.
+- **Resource side**: `ProtectedResourceHandler` / `ResourceMetadataURL` /
+  `ResourceMetadataPath` (**RFC 9728**), `Challenge` (401 +
+  `WWW-Authenticate: Bearer resource_metadata=…, scope=…`), `InsufficientScope`
+  (403 step-up), `RequireScopes`.
+- **`auth.WithOAuthResource(server, resource)`**: the middleware accepts OAuth
+  tokens (Bearer only) with precedence session → OAuth → API key;
+  `Principal` gains `ViaOAuth` and `ClientID` (scopes in `Scopes`).
+- Connected apps: `ListGrants`, `RevokeGrant`, `RevokeClient`; GC:
+  `PurgeExpired` (codes + grants), `PurgeStaleClients` (unused DCR clients).
+- `oauth.Store` implemented in all four stores (`memstore.Store.OAuth()`,
+  `gormstore`/`pgxstore`/`pgxsqlc` `NewOAuthStore`); codes, consents and grants
+  cascade on user delete.
+- **`oauth/oauthtest`**: exported store-conformance and end-to-end suites.
+- **`demo/mcpoauth`**: runnable MCP server with lazy auth (public + protected
+  tool).
+
+### Changed
+- `TokenService.ValidateAccessToken` rejects `typ: at+jwt` tokens, so OAuth
+  access tokens can never be used as app session tokens.
+- `TokenOptions.ResolvedSigner()` exposes the effective signer.
+- Store modules: `golang.org/x/text` → v0.43.0 (GO-2026-5970, reachable via
+  gorm), `golang.org/x/sync` → v0.24.0.
+
+### Fixed
+- Includes the pgxstore fix released as `stores/pgxstore/v0.6.1`: jsonb
+  parameters are passed as string, so user creation and API keys work behind
+  transaction-pooling proxies (PgBouncer; `QueryExecModeExec` /
+  `QueryExecModeSimpleProtocol`). The OAuth store is also tested in both modes.
+- The pgxstore exec-mode test closed its pool before its cleanups ran, leaving
+  rows behind and failing on the next run.
+
+### Schema
+- New tables `identity_oauth_clients`, `identity_oauth_codes`,
+  `identity_oauth_consents`, `identity_oauth_grants` (`TableNames.OAuth*`,
+  honoring `WithSchema`/`WithTablePrefix`/`WithTableNames`) in every store's
+  `Migrate`, the canonical `identity/migrations/postgres.sql`, and a versioned
+  migration (`migrations/20261011000001_oauth_server.sql`).
+
 ## v0.6.0
 
 Multi-session refresh tokens — fixes the single-slot model that silently forced

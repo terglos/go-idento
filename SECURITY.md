@@ -28,6 +28,21 @@ mitigation as quickly as is practical.
 - Refresh tokens are rotated on every use and carry a server-side expiry
   (`RefreshTokenTTL`, sliding on rotation), so a stolen, dormant token dies at
   the TTL.
+- **OAuth authorization server** (`oauth`): PKCE S256 is mandatory; codes are
+  single-use (a replay revokes the grant issued from it) and live 60 s; refresh
+  tokens rotate on every use and a reused one revokes the whole grant (strict
+  by default — `RefreshReuseGrace` is 0); access tokens are audience-bound
+  `at+jwt` JWTs that are rejected once their grant is revoked, the user's
+  security stamp changes or the user is locked out. Codes, refresh tokens and
+  client secrets are stored hashed. Consent forms carry an HMAC CSRF token
+  bound to the user and every request parameter; the default consent page
+  denies framing.
+- **CIMD fetches (SSRF).** URL client_ids are fetched over https only, without
+  following redirects or using a proxy, with a 5 s timeout and 5 KB cap; every
+  dialed address is checked against special-use ranges (loopback, private,
+  link-local, CGNAT, multicast, …) *at connect time*, which also defeats DNS
+  rebinding. `CIMDFetcher.AllowPrivateNetworks` disables this and is meant for
+  tests only.
 
 ## Known limitations
 
@@ -60,3 +75,10 @@ The library is unopinionated about transport; a few controls are yours to wire:
   `loginProvider`/`providerKey` you pass as already-verified. Validate the
   OAuth/OIDC ID-token signature and `iss`/`aud`/`exp` against the provider first,
   and derive `providerKey` from the validated `sub` claim.
+- **OAuth server deployment.** Serve the issuer over https; behind several
+  instances set a stable `Options.CSRFKey` (the default is per-process); behind
+  a proxy set `Options.ClientIP` so DCR rate limiting sees the real client IP;
+  run `PurgeExpired` / `PurgeStaleClients` periodically; show the
+  `ConsentRequest.ClientHost` (not just the self-asserted `ClientName`) on a
+  custom consent page; and advertise only the scopes your API needs (consider
+  `RequireOfflineAccess` to make long-lived access opt-in).

@@ -45,6 +45,15 @@ auth/                  HTTP layer
   policy.go            Policy/claims authorization + RequirePolicy
   cookie.go            CookieAuth (HttpOnly cookie sessions)
   jwks.go              JWKSHandler (serves a Signer's public keys)
+  (WithOAuthResource)  accepts oauth access tokens; precedence session -> OAuth -> API key
+oauth/                 embedded OAuth 2.1 authorization server (MCP connectors) — core module
+  server.go            NewServer/Options, Routes, metadata (RFC 8414), connected apps, GC
+  authorize.go         authorize endpoint: PKCE S256, login redirect, consent + CSRF
+  token.go             token endpoint (code, refresh rotation + reuse detection), at+jwt, ValidateResourceToken, revoke
+  register.go          DCR (RFC 7591)        cimd.go  URL client_ids (SSRF-hardened fetch)
+  resource.go          PRM (RFC 9728), Challenge/InsufficientScope/RequireScopes
+  types.go             Client/Code/Consent/Grant + oauth.Store (implemented in all 4 stores)
+  oauthtest/           exported RunStoreConformance + RunEndToEnd suites
 stores/
   memstore/            in-memory store (tests/prototyping) — part of the CORE module
   gormstore/           [own module] GORM (Postgres/MySQL/SQLite); generic.go = NewUserStoreOf[T]
@@ -52,6 +61,7 @@ stores/
   pgxstore/            [own module] raw pgx (PostgreSQL) + example/postgres demo
   pgxsqlc/             [own module] sqlc-generated pgx store; regenerate: `sqlc generate`
 demo/totp/             TOTP code helper (core only)
+demo/mcpoauth/         MCP server behind oauth.Server, lazy 401 auth (core only)
 migrations/            versioned SQL history (baseline); atlas.hcl at repo root
 
 Multi-module repo: the root module is dependency-light (jwt/uuid/x-crypto);
@@ -139,4 +149,10 @@ generated code committed.
 
 ## Roadmap (not yet done)
 
-WebAuthn/passkeys · backchannel logout / token introspection · generic role types.
+WebAuthn/passkeys · backchannel logout / token introspection · generic role types ·
+OIDC provider (ID tokens/discovery) on top of `oauth`.
+
+OAuth store changes: the `oauth.Store` interface lives in package `oauth`; a new
+method must be implemented in memstore/gormstore/pgxstore/pgxsqlc and covered by
+`oauth/oauthtest.RunStoreConformance` (run by every store's tests; the pgx ones
+need `GOIDENTITY_PG_DSN` / `GOIDENTITY_PG_SQLC_DSN`).

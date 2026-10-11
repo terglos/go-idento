@@ -100,3 +100,56 @@ CREATE TABLE IF NOT EXISTS identity_refresh_tokens (
 CREATE UNIQUE INDEX IF NOT EXISTS ux_identity_refresh_tokens_hash ON identity_refresh_tokens (token_hash);
 CREATE INDEX IF NOT EXISTS ix_identity_refresh_tokens_user ON identity_refresh_tokens (user_id);
 CREATE INDEX IF NOT EXISTS ix_identity_refresh_tokens_exp ON identity_refresh_tokens (expires_at);
+
+-- Embedded OAuth 2.1 authorization server (package oauth).
+CREATE TABLE IF NOT EXISTS identity_oauth_clients (
+    client_id                  varchar(512) PRIMARY KEY,
+    secret_hash                varchar(128) NOT NULL DEFAULT '',
+    name                       varchar(256) NOT NULL DEFAULT '',
+    redirect_uris              text         NOT NULL DEFAULT '[]',
+    token_endpoint_auth_method varchar(32)  NOT NULL DEFAULT '',
+    grant_types                text         NOT NULL DEFAULT '[]',
+    created_at                 timestamptz  NOT NULL DEFAULT now(),
+    last_used_at               timestamptz
+);
+
+CREATE TABLE IF NOT EXISTS identity_oauth_codes (
+    code_hash      varchar(128) PRIMARY KEY,
+    client_id      varchar(512) NOT NULL,
+    user_id        varchar(36)  NOT NULL REFERENCES identity_users(id) ON DELETE CASCADE,
+    redirect_uri   text         NOT NULL,
+    scopes         text         NOT NULL DEFAULT '',
+    resource       text         NOT NULL DEFAULT '',
+    code_challenge varchar(128) NOT NULL,
+    expires_at     timestamptz  NOT NULL,
+    used_at        timestamptz,
+    grant_id       varchar(36)  NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS ix_identity_oauth_codes_user ON identity_oauth_codes (user_id);
+CREATE INDEX IF NOT EXISTS ix_identity_oauth_codes_exp ON identity_oauth_codes (expires_at);
+
+CREATE TABLE IF NOT EXISTS identity_oauth_consents (
+    user_id    varchar(36)  NOT NULL REFERENCES identity_users(id) ON DELETE CASCADE,
+    client_id  varchar(512) NOT NULL,
+    scopes     text         NOT NULL DEFAULT '',
+    created_at timestamptz  NOT NULL DEFAULT now(),
+    updated_at timestamptz  NOT NULL DEFAULT now(),
+    PRIMARY KEY (user_id, client_id)
+);
+
+CREATE TABLE IF NOT EXISTS identity_oauth_grants (
+    id              varchar(36)  PRIMARY KEY,
+    user_id         varchar(36)  NOT NULL REFERENCES identity_users(id) ON DELETE CASCADE,
+    client_id       varchar(512) NOT NULL,
+    scopes          text         NOT NULL DEFAULT '',
+    resource        text         NOT NULL DEFAULT '',
+    token_hash      varchar(128) NOT NULL DEFAULT '',
+    prev_token_hash varchar(128) NOT NULL DEFAULT '',
+    security_stamp  varchar(64)  NOT NULL DEFAULT '',
+    expires_at      timestamptz  NOT NULL,
+    created_at      timestamptz  NOT NULL DEFAULT now(),
+    last_used_at    timestamptz
+);
+CREATE INDEX IF NOT EXISTS ix_identity_oauth_grants_user ON identity_oauth_grants (user_id);
+CREATE INDEX IF NOT EXISTS ix_identity_oauth_grants_client ON identity_oauth_grants (client_id);
+CREATE INDEX IF NOT EXISTS ix_identity_oauth_grants_exp ON identity_oauth_grants (expires_at);

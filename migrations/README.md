@@ -1,7 +1,8 @@
 # migrations
 
-Versioned schema history for go-idento. Applying the full sequence (baseline +
-`20260609000001_cascade_fks`) yields the canonical schema in
+Versioned schema history for go-idento. Applying the full sequence (baseline,
+cascade FKs, guest identity, API keys, refresh sessions, OAuth server) yields
+the canonical schema in
 [`identity/migrations/postgres.sql`](../identity/migrations/postgres.sql),
 including the `ON DELETE CASCADE` foreign keys.
 

@@ -106,6 +106,22 @@ roles) in the request context. Authorization is composed on top:
 `RequireAuth` (401 if anonymous), and `RequireRole` / `RequirePolicy` (403 if the
 role or policy check fails).
 
+Options extend what a Bearer value may be: `WithOAuthResource` accepts access
+tokens minted by the embedded OAuth server, `WithAPIKeys` opaque API keys. The
+order is session JWT → OAuth access token → API key; an OAuth principal has
+`ViaOAuth`, `ClientID` and `Scopes` set.
+
+## OAuth authorization server (`oauth`)
+
+`oauth.Server` sits beside the managers and reuses them: users and lockout come
+from the `UserManager`, the signing key from the `TokenService` (so JWKS is
+unchanged). Its own state — clients, single-use codes, remembered consents and
+grants (one per user × client connection, holding the rotating refresh-token
+hash) — lives behind `oauth.Store`, implemented by every store. Access tokens
+reference their grant (`gid`), so deleting a grant (revocation, refresh reuse,
+code replay, disconnecting the app) invalidates them immediately. Login and
+consent UI stay in the app via callbacks. See [oauth-server.md](oauth-server.md).
+
 ## Stores
 
 All three implement the same interfaces; pick by need:
