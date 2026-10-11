@@ -53,7 +53,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
-        with: { go-version: 'stable' }
+        # staticcheck lags new Go releases (export-data format); lint on the
+        # previous minor, which matches the modules' go 1.26 language version.
+        with: { go-version: 'oldstable' }
       - run: go install honnef.co/go/tools/cmd/staticcheck@latest
       - name: staticcheck
         run: staticcheck $(go list ./... | grep -v '/internal/sqlcgen')
