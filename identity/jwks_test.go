@@ -93,7 +93,16 @@ func rebuildEC(t *testing.T, jwk identity.JWK) *ecdsa.PublicKey {
 	t.Helper()
 	x, _ := base64.RawURLEncoding.DecodeString(jwk.X)
 	y, _ := base64.RawURLEncoding.DecodeString(jwk.Y)
-	return &ecdsa.PublicKey{Curve: elliptic.P256(), X: new(big.Int).SetBytes(x), Y: new(big.Int).SetBytes(y)}
+	// Uncompressed SEC 1 point: 0x04 || X || Y, each left-padded to 32 bytes.
+	point := make([]byte, 65)
+	point[0] = 4
+	copy(point[33-len(x):33], x)
+	copy(point[65-len(y):], y)
+	pub, err := ecdsa.ParseUncompressedPublicKey(elliptic.P256(), point)
+	if err != nil {
+		t.Fatalf("rebuild EC key: %v", err)
+	}
+	return pub
 }
 
 func rebuildRSA(t *testing.T, jwk identity.JWK) *rsa.PublicKey {
