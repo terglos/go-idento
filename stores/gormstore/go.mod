@@ -1,12 +1,12 @@
 module github.com/terglos/go-idento/stores/gormstore
 
-go 1.26
+go 1.26.0
 
 toolchain go1.26.4
 
 require (
 	github.com/glebarez/sqlite v1.11.0
-	github.com/terglos/go-idento v0.6.0
+	github.com/terglos/go-idento v0.7.0
 	gorm.io/gorm v1.31.1
 )
 

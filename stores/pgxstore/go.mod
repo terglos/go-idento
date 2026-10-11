@@ -1,12 +1,12 @@
 module github.com/terglos/go-idento/stores/pgxstore
 
-go 1.26
+go 1.26.0
 
 toolchain go1.26.4
 
 require (
 	github.com/jackc/pgx/v5 v5.10.0
-	github.com/terglos/go-idento v0.6.0
+	github.com/terglos/go-idento v0.7.0
 )
 
 require (
