@@ -28,6 +28,7 @@ type oauthQueries struct {
 	getConsent, saveConsent, deleteConsent                                                  string
 	createGrant, getGrant, rotateGrant, deleteGrant, deleteUserClientGrants, listUserGrants string
 	deleteExpiredGrants                                                                     string
+	useAssertion, deleteExpiredAssertions                                                   string
 }
 
 const (
@@ -39,6 +40,7 @@ const (
 func buildOAuthQueries(n identity.Naming) oauthQueries {
 	C, CD := n.Qualify(n.Tables.OAuthClients), n.Qualify(n.Tables.OAuthCodes)
 	CS, G := n.Qualify(n.Tables.OAuthConsents), n.Qualify(n.Tables.OAuthGrants)
+	A := n.Qualify(n.Tables.OAuthAssertions)
 	return oauthQueries{
 		createClient: fmt.Sprintf(`INSERT INTO %s (%s) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`, C, clientCols),
 		getClient:    fmt.Sprintf(`SELECT %s FROM %s WHERE client_id=$1`, clientCols, C),
@@ -61,6 +63,9 @@ func buildOAuthQueries(n identity.Naming) oauthQueries {
 		deleteUserClientGrants: fmt.Sprintf(`DELETE FROM %s WHERE user_id=$1 AND client_id=$2`, G),
 		listUserGrants:         fmt.Sprintf(`SELECT %s FROM %s WHERE user_id=$1 ORDER BY created_at`, grantCols, G),
 		deleteExpiredGrants:    fmt.Sprintf(`DELETE FROM %s WHERE expires_at < $1`, G),
+		useAssertion: fmt.Sprintf(`INSERT INTO %s (client_id, jti, expires_at) VALUES ($1,$2,$3)
+			ON CONFLICT (client_id, jti) DO NOTHING`, A),
+		deleteExpiredAssertions: fmt.Sprintf(`DELETE FROM %s WHERE expires_at < $1`, A),
 	}
 }
 
@@ -215,5 +220,15 @@ func (s *OAuthStore) ListUserGrants(ctx context.Context, userID string) ([]oauth
 
 func (s *OAuthStore) DeleteExpiredGrants(ctx context.Context, before time.Time) (int64, error) {
 	tag, err := s.db.Exec(ctx, s.q.deleteExpiredGrants, before)
+	return tag.RowsAffected(), err
+}
+
+func (s *OAuthStore) UseClientAssertion(ctx context.Context, clientID, jti string, expiresAt time.Time) (bool, error) {
+	tag, err := s.db.Exec(ctx, s.q.useAssertion, clientID, jti, expiresAt)
+	return tag.RowsAffected() == 1, err
+}
+
+func (s *OAuthStore) DeleteExpiredClientAssertions(ctx context.Context, before time.Time) (int64, error) {
+	tag, err := s.db.Exec(ctx, s.q.deleteExpiredAssertions, before)
 	return tag.RowsAffected(), err
 }

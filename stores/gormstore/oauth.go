@@ -137,3 +137,16 @@ func (s *OAuthStore) DeleteExpiredGrants(ctx context.Context, before time.Time) 
 	res := s.db.WithContext(ctx).Table(s.t.oauthGrants).Where("expires_at < ?", before).Delete(&oauth.Grant{})
 	return res.RowsAffected, res.Error
 }
+
+func (s *OAuthStore) UseClientAssertion(ctx context.Context, clientID, jti string, expiresAt time.Time) (bool, error) {
+	// Insert-or-ignore on the (client_id, jti) primary key: exactly one caller
+	// gets RowsAffected == 1, so concurrent replays on other instances lose.
+	res := s.db.WithContext(ctx).Table(s.t.oauthAssertions).Clauses(clause.OnConflict{DoNothing: true}).
+		Create(&oauth.ClientAssertion{ClientID: clientID, JTI: jti, ExpiresAt: expiresAt})
+	return res.RowsAffected == 1, res.Error
+}
+
+func (s *OAuthStore) DeleteExpiredClientAssertions(ctx context.Context, before time.Time) (int64, error) {
+	res := s.db.WithContext(ctx).Table(s.t.oauthAssertions).Where("expires_at < ?", before).Delete(&oauth.ClientAssertion{})
+	return res.RowsAffected, res.Error
+}

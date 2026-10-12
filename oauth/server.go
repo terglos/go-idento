@@ -88,6 +88,10 @@ type Options struct {
 	// negative disables). ClientIP extracts the IP (default: RemoteAddr host).
 	RegisterLimit int
 	ClientIP      func(r *http.Request) string
+	// ClientAssertionMaxLifetime is the furthest in the future a private_key_jwt
+	// client assertion's exp may be (default 1h); it bounds how long used
+	// assertion ids are kept for replay detection.
+	ClientAssertionMaxLifetime time.Duration
 	// Now overrides the clock (tests).
 	Now func() time.Time
 }
@@ -117,9 +121,16 @@ type resolvedClient struct {
 	SecretHash   string
 	GrantTypes   []string
 	CIMD         bool
+	// private_key_jwt: the client's keys come from JWKSURI (fetched and cached)
+	// or are inline (Keys); SigningAlg pins the assertion algorithm when declared.
+	JWKSURI    string
+	Keys       []clientKey
+	SigningAlg string
 }
 
-func (c *resolvedClient) public() bool { return c.SecretHash == "" }
+func (c *resolvedClient) public() bool {
+	return c.SecretHash == "" && c.AuthMethod != AuthMethodPrivateKeyJWT
+}
 
 // NewServer validates the options and builds the server. Access tokens are
 // signed with tokens' signer (HS256 key or RS256/ES256 keyring), so the app's
@@ -171,6 +182,9 @@ func NewServer(users *identity.UserManager, tokens *identity.TokenService, store
 	}
 	if o.RefreshTokenTTL <= 0 {
 		o.RefreshTokenTTL = 30 * 24 * time.Hour
+	}
+	if o.ClientAssertionMaxLifetime <= 0 {
+		o.ClientAssertionMaxLifetime = time.Hour
 	}
 	for _, p := range []*string{&o.AuthorizePath, &o.TokenPath, &o.RegisterPath, &o.RevokePath} {
 		if *p != "" && !strings.HasPrefix(*p, "/") {
@@ -259,14 +273,20 @@ func (s *Server) Metadata() map[string]any {
 		"response_modes_supported":                       []string{"query"},
 		"grant_types_supported":                          []string{GrantTypeAuthorizationCode, GrantTypeRefreshToken},
 		"code_challenge_methods_supported":               []string{"S256"},
-		"token_endpoint_auth_methods_supported":          []string{AuthMethodNone, AuthMethodClientSecretBasic, AuthMethodClientSecretPost},
-		"revocation_endpoint_auth_methods_supported":     []string{AuthMethodNone, AuthMethodClientSecretBasic, AuthMethodClientSecretPost},
 		"client_id_metadata_document_supported":          s.opts.AllowCIMD,
 		"authorization_response_iss_parameter_supported": true,
 	}
 	if len(s.opts.Scopes) > 0 {
 		m["scopes_supported"] = s.opts.Scopes
 	}
+	authMethods := []string{AuthMethodNone, AuthMethodClientSecretBasic, AuthMethodClientSecretPost}
+	if s.opts.AllowCIMD { // private_key_jwt is available to metadata-document clients
+		authMethods = append(authMethods, AuthMethodPrivateKeyJWT)
+		m["token_endpoint_auth_signing_alg_values_supported"] = AssertionSigningAlgs
+		m["revocation_endpoint_auth_signing_alg_values_supported"] = AssertionSigningAlgs
+	}
+	m["token_endpoint_auth_methods_supported"] = authMethods
+	m["revocation_endpoint_auth_methods_supported"] = authMethods
 	if s.opts.AllowDCR {
 		m["registration_endpoint"] = s.endpoint(s.opts.RegisterPath)
 	}
@@ -391,14 +411,17 @@ func (s *Server) RevokeClient(ctx context.Context, userID, clientID string) erro
 	return s.store.DeleteConsent(ctx, userID, clientID)
 }
 
-// PurgeExpired deletes expired authorization codes and grants (run it from a
-// periodic job).
+// PurgeExpired deletes expired authorization codes and grants, and the
+// recorded ids of expired client assertions (run it from a periodic job).
 func (s *Server) PurgeExpired(ctx context.Context) (codes, grants int64, err error) {
 	now := s.opts.Now()
 	if codes, err = s.store.DeleteExpiredCodes(ctx, now); err != nil {
 		return
 	}
-	grants, err = s.store.DeleteExpiredGrants(ctx, now)
+	if grants, err = s.store.DeleteExpiredGrants(ctx, now); err != nil {
+		return
+	}
+	_, err = s.store.DeleteExpiredClientAssertions(ctx, now)
 	return
 }
 

@@ -10,7 +10,7 @@ management, password hashing, claims, lockout, two-factor and JWT, built on
 pluggable stores so the persistence layer can be swapped without touching
 business logic.
 
-> Status: beta (v0.7.0). User/role/sign-in managers, PBKDF2 hashing, JWT
+> Status: beta (v0.8.0). User/role/sign-in managers, PBKDF2 hashing, JWT
 > (HS256/RS256/ES256) + JWKS, TOTP/SMS two-factor with recovery codes, external
 > logins, email-confirmation/password-reset tokens, policy authorization, API
 > keys, multi-session refresh and an embedded OAuth 2.1 authorization server
@@ -47,7 +47,7 @@ app and own your data. go-idento fills that gap with familiar building blocks �
 | Two-factor | TOTP + SMS + recovery codes, pluggable `TwoFactorTokenProvider` |
 | Tokens | `identity.TokenService` (JWT access + refresh, HS256/RS256/ES256) |
 | Sessions | **multi-session refresh** via `WithSessionStore` — one token per device, per-session revoke, `MaxSessions` |
-| OAuth server | `oauth.Server` — embedded OAuth 2.1 AS for MCP connectors (PKCE, DCR, CIMD, RFC 8414/9728/8707/7009), `auth.WithOAuthResource` |
+| OAuth server | `oauth.Server` — embedded OAuth 2.1 AS for MCP connectors (PKCE, DCR, CIMD + `private_key_jwt`, RFC 8414/9728/8707/7009/7523), `auth.WithOAuthResource` |
 | Delivery | `identity.SMSSender` / `identity.EmailSender` (provider-agnostic) |
 | Persistence | `identity.UserStore` / `identity.RoleStore` interfaces |
 | Password hashing | `identity.PasswordHasher` (PBKDF2, versioned format) |
@@ -186,7 +186,8 @@ EF `add-migration` loop. goose / golang-migrate can run the same SQL.
 - [x] **Embedded OAuth 2.1 authorization server** (`oauth.Server`) for MCP
   connectors (Claude, ChatGPT) and other third-party clients: PKCE S256,
   RFC 8414 / RFC 9728 metadata, RFC 8707 audience-bound `at+jwt` tokens, DCR
-  (RFC 7591) + CIMD (SSRF-hardened), loopback redirects (RFC 8252), refresh
+  (RFC 7591) + CIMD (SSRF-hardened) with `private_key_jwt` client assertions
+  (RFC 7523 — what ChatGPT uses), loopback redirects (RFC 8252), refresh
   rotation with reuse detection, revocation (RFC 7009), app-owned
   login/consent, connected-apps API, GC, `auth.WithOAuthResource` +
   `oauth.Challenge` for lazy 401 auth ([guide](docs/oauth-server.md))

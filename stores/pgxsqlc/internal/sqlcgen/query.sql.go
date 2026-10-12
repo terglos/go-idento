@@ -325,6 +325,18 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) error {
 	return err
 }
 
+const deleteExpiredOAuthClientAssertions = `-- name: DeleteExpiredOAuthClientAssertions :execrows
+DELETE FROM identity_oauth_assertions WHERE expires_at < $1
+`
+
+func (q *Queries) DeleteExpiredOAuthClientAssertions(ctx context.Context, expiresAt time.Time) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteExpiredOAuthClientAssertions, expiresAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteExpiredOAuthCodes = `-- name: DeleteExpiredOAuthCodes :execrows
 DELETE FROM identity_oauth_codes WHERE expires_at < $1
 `
@@ -1495,4 +1507,23 @@ func (q *Queries) UpsertUserToken(ctx context.Context, arg UpsertUserTokenParams
 		arg.Value,
 	)
 	return err
+}
+
+const useOAuthClientAssertion = `-- name: UseOAuthClientAssertion :execrows
+INSERT INTO identity_oauth_assertions (client_id, jti, expires_at) VALUES ($1, $2, $3)
+ON CONFLICT (client_id, jti) DO NOTHING
+`
+
+type UseOAuthClientAssertionParams struct {
+	ClientID  string
+	Jti       string
+	ExpiresAt time.Time
+}
+
+func (q *Queries) UseOAuthClientAssertion(ctx context.Context, arg UseOAuthClientAssertionParams) (int64, error) {
+	result, err := q.db.Exec(ctx, useOAuthClientAssertion, arg.ClientID, arg.Jti, arg.ExpiresAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }

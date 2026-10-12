@@ -35,7 +35,7 @@ func TestSqlcIntegration(t *testing.T) {
 	_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS identity_users, identity_roles, identity_user_roles,
 		identity_user_claims, identity_role_claims, identity_user_logins, identity_user_tokens,
 		identity_api_keys, identity_refresh_tokens, identity_oauth_clients, identity_oauth_codes,
-		identity_oauth_consents, identity_oauth_grants CASCADE`)
+		identity_oauth_consents, identity_oauth_grants, identity_oauth_assertions CASCADE`)
 	if err := pgxsqlc.Migrate(ctx, pool); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}

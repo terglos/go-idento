@@ -40,24 +40,27 @@ type TableNames struct {
 	OAuthCodes    string
 	OAuthConsents string
 	OAuthGrants   string
+	// OAuthAssertions holds used client-assertion ids (private_key_jwt replay protection).
+	OAuthAssertions string
 }
 
 // DefaultTableNames returns the canonical identity_* names.
 func DefaultTableNames() TableNames {
 	return TableNames{
-		Users:         "identity_users",
-		Roles:         "identity_roles",
-		UserRoles:     "identity_user_roles",
-		UserClaims:    "identity_user_claims",
-		RoleClaims:    "identity_role_claims",
-		UserLogins:    "identity_user_logins",
-		UserTokens:    "identity_user_tokens",
-		APIKeys:       "identity_api_keys",
-		RefreshTokens: "identity_refresh_tokens",
-		OAuthClients:  "identity_oauth_clients",
-		OAuthCodes:    "identity_oauth_codes",
-		OAuthConsents: "identity_oauth_consents",
-		OAuthGrants:   "identity_oauth_grants",
+		Users:           "identity_users",
+		Roles:           "identity_roles",
+		UserRoles:       "identity_user_roles",
+		UserClaims:      "identity_user_claims",
+		RoleClaims:      "identity_role_claims",
+		UserLogins:      "identity_user_logins",
+		UserTokens:      "identity_user_tokens",
+		APIKeys:         "identity_api_keys",
+		RefreshTokens:   "identity_refresh_tokens",
+		OAuthClients:    "identity_oauth_clients",
+		OAuthCodes:      "identity_oauth_codes",
+		OAuthConsents:   "identity_oauth_consents",
+		OAuthGrants:     "identity_oauth_grants",
+		OAuthAssertions: "identity_oauth_assertions",
 	}
 }
 
@@ -66,19 +69,20 @@ func DefaultTableNames() TableNames {
 // full control.
 func (n TableNames) WithPrefix(prefix string) TableNames {
 	return TableNames{
-		Users:         prefix + n.Users,
-		Roles:         prefix + n.Roles,
-		UserRoles:     prefix + n.UserRoles,
-		UserClaims:    prefix + n.UserClaims,
-		RoleClaims:    prefix + n.RoleClaims,
-		UserLogins:    prefix + n.UserLogins,
-		UserTokens:    prefix + n.UserTokens,
-		APIKeys:       prefix + n.APIKeys,
-		RefreshTokens: prefix + n.RefreshTokens,
-		OAuthClients:  prefix + n.OAuthClients,
-		OAuthCodes:    prefix + n.OAuthCodes,
-		OAuthConsents: prefix + n.OAuthConsents,
-		OAuthGrants:   prefix + n.OAuthGrants,
+		Users:           prefix + n.Users,
+		Roles:           prefix + n.Roles,
+		UserRoles:       prefix + n.UserRoles,
+		UserClaims:      prefix + n.UserClaims,
+		RoleClaims:      prefix + n.RoleClaims,
+		UserLogins:      prefix + n.UserLogins,
+		UserTokens:      prefix + n.UserTokens,
+		APIKeys:         prefix + n.APIKeys,
+		RefreshTokens:   prefix + n.RefreshTokens,
+		OAuthClients:    prefix + n.OAuthClients,
+		OAuthCodes:      prefix + n.OAuthCodes,
+		OAuthConsents:   prefix + n.OAuthConsents,
+		OAuthGrants:     prefix + n.OAuthGrants,
+		OAuthAssertions: prefix + n.OAuthAssertions,
 	}
 }
 
@@ -108,6 +112,7 @@ func (n Naming) Validate() error {
 		"APIKeys": n.Tables.APIKeys, "RefreshTokens": n.Tables.RefreshTokens,
 		"OAuthClients": n.Tables.OAuthClients, "OAuthCodes": n.Tables.OAuthCodes,
 		"OAuthConsents": n.Tables.OAuthConsents, "OAuthGrants": n.Tables.OAuthGrants,
+		"OAuthAssertions": n.Tables.OAuthAssertions,
 	} {
 		if !isValidIdentifier(name) {
 			return fmt.Errorf("%w: table %s=%q", ErrInvalidIdentifier, label, name)

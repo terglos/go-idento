@@ -262,3 +262,10 @@ FROM identity_oauth_grants WHERE user_id = $1 ORDER BY created_at;
 
 -- name: DeleteExpiredOAuthGrants :execrows
 DELETE FROM identity_oauth_grants WHERE expires_at < $1;
+
+-- name: UseOAuthClientAssertion :execrows
+INSERT INTO identity_oauth_assertions (client_id, jti, expires_at) VALUES ($1, $2, $3)
+ON CONFLICT (client_id, jti) DO NOTHING;
+
+-- name: DeleteExpiredOAuthClientAssertions :execrows
+DELETE FROM identity_oauth_assertions WHERE expires_at < $1;

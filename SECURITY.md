@@ -42,7 +42,17 @@ mitigation as quickly as is practical.
   dialed address is checked against special-use ranges (loopback, private,
   link-local, CGNAT, multicast, …) *at connect time*, which also defeats DNS
   rebinding. `CIMDFetcher.AllowPrivateNetworks` disables this and is meant for
-  tests only.
+  tests only. A `jwks_uri` declared by a document goes through the same client
+  (https only, no redirects, no proxy, dial-time IP checks; 64 KB cap).
+- **`private_key_jwt` (CIMD clients).** A client whose metadata document
+  declares it must authenticate every token/revocation request with an
+  RFC 7523 assertion — PKCE alone is refused. Only RS256/ES256 with the
+  client's published keys (RSA ≥ 2048, P-256) are accepted, never `none` or
+  HMAC; `iss`/`sub`/`aud`/`exp`/`iat` are enforced, `exp` is capped
+  (`ClientAssertionMaxLifetime`, default 1 h) and each `jti` is accepted once,
+  recorded in the shared store so replays fail on every instance. The accepted
+  `aud` values are the issuer and this server's own token (or revocation)
+  endpoint URL.
 
 ## Known limitations
 

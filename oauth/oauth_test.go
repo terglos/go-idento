@@ -93,6 +93,26 @@ func cimdServer(t *testing.T) (*httptest.Server, *oauth.CIMDFetcher) {
 	mux.HandleFunc("/basic.json", func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write(doc(ts.URL+"/basic.json", map[string]any{"token_endpoint_auth_method": "client_secret_basic"}))
 	})
+	pkjwt := map[string]string{ // private_key_jwt documents that must be refused
+		"/pkjwt-nokeys.json": `{}`,
+		"/pkjwt-both.json":   `{"jwks_uri":"https://keys.example/jwks.json","jwks":{"keys":[]}}`,
+		"/pkjwt-http.json":   `{"jwks_uri":"http://keys.example/jwks.json"}`,
+		"/pkjwt-hs256.json":  `{"jwks_uri":"https://keys.example/jwks.json","token_endpoint_auth_signing_alg":"HS256"}`,
+		"/pkjwt-private.json": `{"jwks":{"keys":[{"kty":"EC","crv":"P-256","x":"f83OJ3D2xF1Bg8vub9tLe1gHMzV76e8Tus9uPHvRVEU",` +
+			`"y":"x_FEzRu9m36HLN_tue659LNpXW6pCyStikYjKIWI5a0","d":"jpsQnnGQmL-YBIffH1136cspYG6-0iY7X1fCE9-E9LI"}]}}`,
+	}
+	for path, extra := range pkjwt {
+		path, extra := path, extra
+		mux.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
+			var m map[string]any
+			_ = json.Unmarshal([]byte(extra), &m)
+			m["token_endpoint_auth_method"] = "private_key_jwt"
+			_, _ = w.Write(doc(ts.URL+path, m))
+		})
+	}
+	mux.HandleFunc("/secretjwt.json", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write(doc(ts.URL+"/secretjwt.json", map[string]any{"token_endpoint_auth_method": "client_secret_jwt"}))
+	})
 	mux.HandleFunc("/redirect.json", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/client.json", http.StatusFound)
 	})
@@ -153,12 +173,18 @@ func TestCIMDRejections(t *testing.T) {
 	ts, fetcher := cimdServer(t)
 	ctx := context.Background()
 	for path, why := range map[string]string{
-		"/mismatch.json": "document client_id must equal the URL",
-		"/secret.json":   "documents must not carry a client secret",
-		"/basic.json":    "shared-secret auth methods are forbidden",
-		"/redirect.json": "redirects must not be followed",
-		"/big.json":      "documents over 5 KB are refused",
-		"/missing.json":  "non-200 responses are errors",
+		"/mismatch.json":      "document client_id must equal the URL",
+		"/secret.json":        "documents must not carry a client secret",
+		"/basic.json":         "shared-secret auth methods are forbidden",
+		"/redirect.json":      "redirects must not be followed",
+		"/big.json":           "documents over 5 KB are refused",
+		"/missing.json":       "non-200 responses are errors",
+		"/secretjwt.json":     "client_secret_jwt is a shared-secret method",
+		"/pkjwt-nokeys.json":  "private_key_jwt needs jwks_uri or jwks",
+		"/pkjwt-both.json":    "jwks_uri and jwks are mutually exclusive",
+		"/pkjwt-http.json":    "jwks_uri must be https",
+		"/pkjwt-hs256.json":   "only RS256/ES256 assertions are supported",
+		"/pkjwt-private.json": "inline jwks must not carry private keys",
 	} {
 		if _, err := fetcher.Resolve(ctx, ts.URL+path); err == nil {
 			t.Errorf("%s: %s", path, why)

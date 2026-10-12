@@ -29,6 +29,11 @@ type CIMDFetcher struct {
 	Timeout time.Duration
 	// MaxBytes caps the document size (default 5 KB).
 	MaxBytes int64
+	// MaxJWKSBytes caps a jwks_uri response (private_key_jwt clients; default 64 KB).
+	MaxJWKSBytes int64
+	// JWKSMinRefresh is the minimum time between re-fetches of a cached
+	// jwks_uri forced by an unknown key id (key rotation); default 30s.
+	JWKSMinRefresh time.Duration
 	// DefaultTTL applies when the response has no max-age (default 5m); cache
 	// lifetimes are clamped to [MinTTL, MaxTTL] (default 1m / 24h).
 	DefaultTTL, MinTTL, MaxTTL time.Duration
@@ -42,6 +47,8 @@ type CIMDFetcher struct {
 	client *http.Client
 	mu     sync.Mutex
 	cache  map[string]cimdEntry
+	// jwksCache holds private_key_jwt clients' key sets by jwks_uri.
+	jwksCache map[string]jwksEntry
 }
 
 type cimdEntry struct {
@@ -52,11 +59,13 @@ type cimdEntry struct {
 // NewCIMDFetcher returns a fetcher with the recommended defaults.
 func NewCIMDFetcher() *CIMDFetcher {
 	return &CIMDFetcher{
-		Timeout:    5 * time.Second,
-		MaxBytes:   5 * 1024,
-		DefaultTTL: 5 * time.Minute,
-		MinTTL:     time.Minute,
-		MaxTTL:     24 * time.Hour,
+		Timeout:        5 * time.Second,
+		MaxBytes:       5 * 1024,
+		MaxJWKSBytes:   64 * 1024,
+		JWKSMinRefresh: 30 * time.Second,
+		DefaultTTL:     5 * time.Minute,
+		MinTTL:         time.Minute,
+		MaxTTL:         24 * time.Hour,
 	}
 }
 
@@ -163,14 +172,17 @@ func (f *CIMDFetcher) httpClient() *http.Client {
 
 // cimdDocument is the subset of client metadata the server uses.
 type cimdDocument struct {
-	ClientID                string   `json:"client_id"`
-	ClientName              string   `json:"client_name"`
-	RedirectURIs            []string `json:"redirect_uris"`
-	TokenEndpointAuthMethod string   `json:"token_endpoint_auth_method"`
-	GrantTypes              []string `json:"grant_types"`
-	ResponseTypes           []string `json:"response_types"`
-	ClientSecret            *string  `json:"client_secret"`
-	ClientSecretExpiresAt   *int64   `json:"client_secret_expires_at"`
+	ClientID                    string          `json:"client_id"`
+	ClientName                  string          `json:"client_name"`
+	RedirectURIs                []string        `json:"redirect_uris"`
+	TokenEndpointAuthMethod     string          `json:"token_endpoint_auth_method"`
+	GrantTypes                  []string        `json:"grant_types"`
+	ResponseTypes               []string        `json:"response_types"`
+	TokenEndpointAuthSigningAlg string          `json:"token_endpoint_auth_signing_alg"`
+	JWKSURI                     string          `json:"jwks_uri"`
+	JWKS                        json.RawMessage `json:"jwks"`
+	ClientSecret                *string         `json:"client_secret"`
+	ClientSecretExpiresAt       *int64          `json:"client_secret_expires_at"`
 }
 
 // Resolve fetches (or returns the cached) metadata document for a CIMD
@@ -246,10 +258,41 @@ func validateCIMDDocument(clientID string, d *cimdDocument) (*resolvedClient, er
 	if d.ClientSecret != nil || d.ClientSecretExpiresAt != nil {
 		return nil, errors.New("client metadata must not contain a client secret")
 	}
+	rc := &resolvedClient{AuthMethod: AuthMethodNone}
 	switch d.TokenEndpointAuthMethod {
 	case "", AuthMethodNone:
+	case AuthMethodPrivateKeyJWT:
+		// Draft §8.2: the server MUST then require RFC 7523 §2.2 authentication
+		// with the keys published by the document.
+		rc.AuthMethod = AuthMethodPrivateKeyJWT
+		hasInline := len(d.JWKS) > 0 && string(d.JWKS) != "null"
+		switch {
+		case d.JWKSURI != "" && hasInline:
+			return nil, errors.New("client metadata must not contain both jwks_uri and jwks")
+		case d.JWKSURI != "":
+			if err := validateJWKSURI(d.JWKSURI); err != nil {
+				return nil, err
+			}
+			rc.JWKSURI = d.JWKSURI
+		case hasInline:
+			keys, err := parseJWKS(d.JWKS)
+			if err != nil {
+				return nil, err
+			}
+			rc.Keys = keys
+		default:
+			return nil, errors.New("private_key_jwt requires jwks_uri or jwks in the client metadata")
+		}
+		if alg := d.TokenEndpointAuthSigningAlg; alg != "" {
+			if !hasScope(AssertionSigningAlgs, alg) {
+				return nil, fmt.Errorf("unsupported token_endpoint_auth_signing_alg %q (supported: %s)", alg, strings.Join(AssertionSigningAlgs, ", "))
+			}
+			rc.SigningAlg = alg
+		}
+	case AuthMethodClientSecretBasic, AuthMethodClientSecretPost, "client_secret_jwt":
+		return nil, fmt.Errorf("token_endpoint_auth_method %q relies on a shared secret, which a metadata-document client must not use", d.TokenEndpointAuthMethod)
 	default:
-		return nil, fmt.Errorf("unsupported token_endpoint_auth_method %q for a metadata-document client (only \"none\")", d.TokenEndpointAuthMethod)
+		return nil, fmt.Errorf("unsupported token_endpoint_auth_method %q for a metadata-document client (supported: none, private_key_jwt)", d.TokenEndpointAuthMethod)
 	}
 	if len(d.RedirectURIs) == 0 {
 		return nil, errors.New("client metadata must list redirect_uris")
@@ -269,14 +312,8 @@ func validateCIMDDocument(clientID string, d *cimdDocument) (*resolvedClient, er
 	if len(name) > 256 {
 		name = name[:256]
 	}
-	return &resolvedClient{
-		ID:           clientID,
-		Name:         name,
-		DisplayHost:  hostOf(clientID),
-		RedirectURIs: d.RedirectURIs,
-		AuthMethod:   AuthMethodNone,
-		CIMD:         true,
-	}, nil
+	rc.ID, rc.Name, rc.DisplayHost, rc.RedirectURIs, rc.CIMD = clientID, name, hostOf(clientID), d.RedirectURIs, true
+	return rc, nil
 }
 
 // cacheTTL derives the cache lifetime from Cache-Control: no-store/no-cache

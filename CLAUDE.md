@@ -51,6 +51,7 @@ oauth/                 embedded OAuth 2.1 authorization server (MCP connectors) 
   authorize.go         authorize endpoint: PKCE S256, login redirect, consent + CSRF
   token.go             token endpoint (code, refresh rotation + reuse detection), at+jwt, ValidateResourceToken, revoke
   register.go          DCR (RFC 7591)        cimd.go  URL client_ids (SSRF-hardened fetch)
+  client_assertion.go  private_key_jwt (RFC 7523) for CIMD clients: jwks_uri/jwks keys, assertion checks, jti replay via Store
   resource.go          PRM (RFC 9728), Challenge/InsufficientScope/RequireScopes
   types.go             Client/Code/Consent/Grant + oauth.Store (implemented in all 4 stores)
   oauthtest/           exported RunStoreConformance + RunEndToEnd suites

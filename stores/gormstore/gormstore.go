@@ -52,24 +52,25 @@ func resolve(opts ...Option) identity.Naming {
 // tables holds the resolved (schema-qualified) physical table names.
 type tables struct {
 	users, roles, userRoles, userClaims, roleClaims, userLogins, userTokens, apiKeys, refreshTokens string
-	oauthClients, oauthCodes, oauthConsents, oauthGrants                                            string
+	oauthClients, oauthCodes, oauthConsents, oauthGrants, oauthAssertions                           string
 }
 
 func resolveTables(n identity.Naming) tables {
 	return tables{
-		users:         n.Qualify(n.Tables.Users),
-		roles:         n.Qualify(n.Tables.Roles),
-		userRoles:     n.Qualify(n.Tables.UserRoles),
-		userClaims:    n.Qualify(n.Tables.UserClaims),
-		roleClaims:    n.Qualify(n.Tables.RoleClaims),
-		userLogins:    n.Qualify(n.Tables.UserLogins),
-		userTokens:    n.Qualify(n.Tables.UserTokens),
-		apiKeys:       n.Qualify(n.Tables.APIKeys),
-		refreshTokens: n.Qualify(n.Tables.RefreshTokens),
-		oauthClients:  n.Qualify(n.Tables.OAuthClients),
-		oauthCodes:    n.Qualify(n.Tables.OAuthCodes),
-		oauthConsents: n.Qualify(n.Tables.OAuthConsents),
-		oauthGrants:   n.Qualify(n.Tables.OAuthGrants),
+		users:           n.Qualify(n.Tables.Users),
+		roles:           n.Qualify(n.Tables.Roles),
+		userRoles:       n.Qualify(n.Tables.UserRoles),
+		userClaims:      n.Qualify(n.Tables.UserClaims),
+		roleClaims:      n.Qualify(n.Tables.RoleClaims),
+		userLogins:      n.Qualify(n.Tables.UserLogins),
+		userTokens:      n.Qualify(n.Tables.UserTokens),
+		apiKeys:         n.Qualify(n.Tables.APIKeys),
+		refreshTokens:   n.Qualify(n.Tables.RefreshTokens),
+		oauthClients:    n.Qualify(n.Tables.OAuthClients),
+		oauthCodes:      n.Qualify(n.Tables.OAuthCodes),
+		oauthConsents:   n.Qualify(n.Tables.OAuthConsents),
+		oauthGrants:     n.Qualify(n.Tables.OAuthGrants),
+		oauthAssertions: n.Qualify(n.Tables.OAuthAssertions),
 	}
 }
 
@@ -154,6 +155,7 @@ func Migrate(db *gorm.DB, opts ...Option) error {
 		{t.apiKeys, &identity.APIKey{}}, {t.refreshTokens, &identity.RefreshToken{}},
 		{t.oauthClients, &oauth.Client{}}, {t.oauthCodes, &oauth.Code{}},
 		{t.oauthConsents, &oauth.Consent{}}, {t.oauthGrants, &oauth.Grant{}},
+		{t.oauthAssertions, &oauth.ClientAssertion{}},
 	}
 	for _, s := range steps {
 		if err := db.Table(s.name).AutoMigrate(s.model); err != nil {

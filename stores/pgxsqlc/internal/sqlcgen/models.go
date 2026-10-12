@@ -22,6 +22,12 @@ type IdentityApiKey struct {
 	CreatedAt  time.Time
 }
 
+type IdentityOauthAssertion struct {
+	ClientID  string
+	Jti       string
+	ExpiresAt time.Time
+}
+
 type IdentityOauthClient struct {
 	ClientID                string
 	SecretHash              string

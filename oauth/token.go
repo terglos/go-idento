@@ -56,7 +56,7 @@ func (s *Server) TokenHandler() http.Handler {
 				return
 			}
 		}
-		client, basic, e := s.authenticateClient(r.Context(), r)
+		client, basic, e := s.authenticateClient(r.Context(), r, s.endpoint(s.opts.TokenPath))
 		if e != nil {
 			if e.Code == "invalid_client" && basic {
 				w.Header().Set("WWW-Authenticate", `Basic realm="oauth"`)
@@ -83,12 +83,20 @@ func (s *Server) TokenHandler() http.Handler {
 	})
 }
 
-// authenticateClient implements none / client_secret_basic / client_secret_post.
-// basic reports whether HTTP Basic credentials were presented.
-func (s *Server) authenticateClient(ctx context.Context, r *http.Request) (*resolvedClient, bool, *Error) {
+// authenticateClient implements none / client_secret_basic /
+// client_secret_post / private_key_jwt for a request to endpoint. basic
+// reports whether HTTP Basic credentials were presented.
+func (s *Server) authenticateClient(ctx context.Context, r *http.Request, endpoint string) (*resolvedClient, bool, *Error) {
 	var id, secret string
 	basicID, basicSecret, basic := r.BasicAuth()
 	formSecret := r.PostForm.Get("client_secret")
+	if r.PostForm.Has("client_assertion") || r.PostForm.Has("client_assertion_type") {
+		if basic || formSecret != "" {
+			return nil, basic, errInvalidRequest("use only one client authentication method")
+		}
+		client, e := s.authenticateAssertion(ctx, endpoint, r.PostForm)
+		return client, false, e
+	}
 	switch {
 	case basic:
 		if formSecret != "" {
@@ -112,6 +120,9 @@ func (s *Server) authenticateClient(ctx context.Context, r *http.Request) (*reso
 	client, err := s.resolveClient(ctx, id)
 	if err != nil {
 		return nil, basic, errInvalidClient(err.Error())
+	}
+	if client.AuthMethod == AuthMethodPrivateKeyJWT {
+		return nil, basic, errInvalidClient("client must authenticate with private_key_jwt (client_assertion)")
 	}
 	if client.public() {
 		if secret != "" {
@@ -412,7 +423,7 @@ func (s *Server) RevokeHandler() http.Handler {
 			writeError(w, errInvalidRequest("malformed form body"))
 			return
 		}
-		client, basic, e := s.authenticateClient(r.Context(), r)
+		client, basic, e := s.authenticateClient(r.Context(), r, s.endpoint(s.opts.RevokePath))
 		if e != nil {
 			if e.Code == "invalid_client" && basic {
 				w.Header().Set("WWW-Authenticate", `Basic realm="oauth"`)

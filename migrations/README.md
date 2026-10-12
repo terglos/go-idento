@@ -1,7 +1,8 @@
 # migrations
 
 Versioned schema history for go-idento. Applying the full sequence (baseline,
-cascade FKs, guest identity, API keys, refresh sessions, OAuth server) yields
+cascade FKs, guest identity, API keys, refresh sessions, OAuth server, OAuth
+client assertions) yields
 the canonical schema in
 [`identity/migrations/postgres.sql`](../identity/migrations/postgres.sql),
 including the `ON DELETE CASCADE` foreign keys.

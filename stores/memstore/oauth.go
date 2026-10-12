@@ -218,3 +218,27 @@ func (s *oauthStore) DeleteExpiredGrants(_ context.Context, before time.Time) (i
 	}
 	return n, nil
 }
+
+func (s *oauthStore) UseClientAssertion(_ context.Context, clientID, jti string, expiresAt time.Time) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	k := [2]string{clientID, jti}
+	if _, seen := s.oauthJTIs[k]; seen {
+		return false, nil
+	}
+	s.oauthJTIs[k] = expiresAt
+	return true, nil
+}
+
+func (s *oauthStore) DeleteExpiredClientAssertions(_ context.Context, before time.Time) (int64, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var n int64
+	for k, exp := range s.oauthJTIs {
+		if exp.Before(before) {
+			delete(s.oauthJTIs, k)
+			n++
+		}
+	}
+	return n, nil
+}

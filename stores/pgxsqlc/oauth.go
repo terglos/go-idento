@@ -157,3 +157,12 @@ func (s *OAuthStore) ListUserGrants(ctx context.Context, userID string) ([]oauth
 func (s *OAuthStore) DeleteExpiredGrants(ctx context.Context, before time.Time) (int64, error) {
 	return s.q.DeleteExpiredOAuthGrants(ctx, before)
 }
+
+func (s *OAuthStore) UseClientAssertion(ctx context.Context, clientID, jti string, expiresAt time.Time) (bool, error) {
+	n, err := s.q.UseOAuthClientAssertion(ctx, gen.UseOAuthClientAssertionParams{ClientID: clientID, Jti: jti, ExpiresAt: expiresAt})
+	return n == 1, err
+}
+
+func (s *OAuthStore) DeleteExpiredClientAssertions(ctx context.Context, before time.Time) (int64, error) {
+	return s.q.DeleteExpiredOAuthClientAssertions(ctx, before)
+}

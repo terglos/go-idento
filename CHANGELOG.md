@@ -4,6 +4,61 @@ Notable changes per release. Versions follow [SemVer](https://semver.org). This
 is a multi-module repo; all modules (`.`, `stores/gormstore`, `stores/pgxstore`,
 `stores/pgxsqlc`) share the same version tag.
 
+## v0.8.0
+
+`private_key_jwt` client authentication (RFC 7523 §2.2) for Client ID Metadata
+Document clients. ChatGPT identifies itself with
+`https://chatgpt.com/oauth/client.json`, which declares
+`token_endpoint_auth_method: "private_key_jwt"` (RS256, `jwks_uri`); v0.7.0
+refused it at `/oauth/authorize` ("only none"), so ChatGPT had to fall back to
+DCR. The CIMD draft only forbids shared-secret methods, and §8.2 requires the
+server to enforce RFC 7523 authentication in this case.
+
+### Added
+- CIMD documents may declare `private_key_jwt` with `jwks_uri` (https; fetched
+  with the document's SSRF protections, 64 KB cap, cached per `Cache-Control`,
+  re-fetched on an unknown `kid` for key rotation, at most every
+  `CIMDFetcher.JWKSMinRefresh`) or inline `jwks`; an optional
+  `token_endpoint_auth_signing_alg` pins the algorithm.
+- Token and revocation endpoints accept `client_assertion` /
+  `client_assertion_type` and **require** them for such clients. Checks:
+  RS256/ES256 (`oauth.AssertionSigningAlgs`) with the client's keys (RSA ≥ 2048,
+  EC P-256); `iss` = `sub` = `client_id`; `aud` = issuer or token endpoint (or
+  the revocation endpoint there); `exp` required and at most
+  `Options.ClientAssertionMaxLifetime` ahead (default 1 h); `iat`/`nbf` not in
+  the future; `jti` required and accepted once. Failures are `401
+  invalid_client` with a specific description.
+- **Replay protection shared by all instances**: used `jti`s are recorded in the
+  store until the assertion expires (`oauth.ClientAssertion`, new table
+  `identity_oauth_assertions`, `TableNames.OAuthAssertions`); `PurgeExpired`
+  also removes expired ids.
+- Metadata advertises `private_key_jwt` in
+  `token_endpoint_auth_methods_supported` /
+  `revocation_endpoint_auth_methods_supported` and
+  `token_endpoint_auth_signing_alg_values_supported` /
+  `revocation_endpoint_auth_signing_alg_values_supported` when `AllowCIMD` is on.
+- `oauthtest.RunEndToEnd`: CIMD client with `jwks_uri` + RS256 (the ChatGPT
+  shape) through authorize → code → refresh → key rotation → revoke, every
+  rejection case (no assertion, wrong `aud`, expired, `iss` ≠ `sub`, overlong
+  `exp`, missing `jti`, future `iat`, unknown key, undeclared algorithm,
+  `alg: none`, replay, `client_id` mismatch, mixed methods), and inline `jwks` +
+  ES256. `RunStoreConformance`: assertion-id storage, including concurrent use.
+
+### Changed
+- **`oauth.Store` gained `UseClientAssertion` and
+  `DeleteExpiredClientAssertions`** (implemented by all four bundled stores).
+  Custom stores must add them; `RunStoreConformance` covers the contract.
+- CIMD documents declaring `client_secret_jwt` are now refused with an explicit
+  shared-secret message, like `client_secret_basic`/`_post`.
+
+### Schema
+- New table `identity_oauth_assertions` (`client_id`, `jti`, `expires_at`;
+  PK `(client_id, jti)`, indexed `expires_at`) in every store's `Migrate`, the
+  canonical `identity/migrations/postgres.sql`, and
+  `migrations/20261012000001_oauth_client_assertions.sql`. Apps that pass a
+  hand-built `TableNames` must set `OAuthAssertions` (start from
+  `DefaultTableNames()`).
+
 ## v0.7.0
 
 Embedded **OAuth 2.1 authorization server** (new package `oauth`) so apps can

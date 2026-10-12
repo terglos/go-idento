@@ -29,7 +29,16 @@ const (
 	AuthMethodNone              = "none"
 	AuthMethodClientSecretBasic = "client_secret_basic"
 	AuthMethodClientSecretPost  = "client_secret_post"
+	// AuthMethodPrivateKeyJWT is RFC 7523 §2.2 client authentication with a JWT
+	// signed by the client's private key; the server verifies it against the
+	// client's published keys (jwks_uri / jwks). Supported for clients that use
+	// a Client ID Metadata Document.
+	AuthMethodPrivateKeyJWT = "private_key_jwt"
 )
+
+// ClientAssertionTypeJWTBearer is the client_assertion_type of an RFC 7523
+// client assertion.
+const ClientAssertionTypeJWTBearer = "urn:ietf:params:oauth:client-assertion-type:jwt-bearer"
 
 // Grant types.
 const (
@@ -115,6 +124,17 @@ type Grant struct {
 
 func (Grant) TableName() string { return "identity_oauth_grants" }
 
+// ClientAssertion records the id (jti) of a client assertion that was
+// accepted, until it expires, so the same assertion can't be replayed — on any
+// instance sharing the store.
+type ClientAssertion struct {
+	ClientID  string    `gorm:"primaryKey;type:varchar(512)"`
+	JTI       string    `gorm:"column:jti;primaryKey;type:varchar(256)"`
+	ExpiresAt time.Time `gorm:"index"`
+}
+
+func (ClientAssertion) TableName() string { return "identity_oauth_assertions" }
+
 // Store persists the authorization server's state. The bundled stores
 // (memstore, gormstore, pgxstore, pgxsqlc) implement it; all lookups return
 // identity.ErrNotFound for a missing row. Run oauthtest.RunStoreConformance
@@ -151,4 +171,10 @@ type Store interface {
 	DeleteUserClientGrants(ctx context.Context, userID, clientID string) (int64, error)
 	ListUserGrants(ctx context.Context, userID string) ([]Grant, error)
 	DeleteExpiredGrants(ctx context.Context, before time.Time) (int64, error)
+
+	// Client assertions (private_key_jwt replay protection).
+	// UseClientAssertion records (clientID, jti) until expiresAt and reports
+	// false when that pair was already recorded (a replay). It must be atomic.
+	UseClientAssertion(ctx context.Context, clientID, jti string, expiresAt time.Time) (bool, error)
+	DeleteExpiredClientAssertions(ctx context.Context, before time.Time) (int64, error)
 }

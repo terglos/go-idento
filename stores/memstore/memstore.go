@@ -33,6 +33,7 @@ type Store struct {
 	oauthCodes    map[string]*oauth.Code            // by code hash
 	oauthConsents map[string]*oauth.Consent         // by user|client
 	oauthGrants   map[string]*oauth.Grant           // by grant id
+	oauthJTIs     map[[2]string]time.Time           // {client, jti} -> expiry
 }
 
 func New() *Store {
@@ -51,6 +52,7 @@ func New() *Store {
 		oauthCodes:    map[string]*oauth.Code{},
 		oauthConsents: map[string]*oauth.Consent{},
 		oauthGrants:   map[string]*oauth.Grant{},
+		oauthJTIs:     map[[2]string]time.Time{},
 	}
 }
 

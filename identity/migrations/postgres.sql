@@ -158,3 +158,11 @@ CREATE TABLE IF NOT EXISTS identity_oauth_grants (
 CREATE INDEX IF NOT EXISTS ix_identity_oauth_grants_user ON identity_oauth_grants (user_id);
 CREATE INDEX IF NOT EXISTS ix_identity_oauth_grants_client ON identity_oauth_grants (client_id);
 CREATE INDEX IF NOT EXISTS ix_identity_oauth_grants_exp ON identity_oauth_grants (expires_at);
+
+CREATE TABLE IF NOT EXISTS identity_oauth_assertions (
+    client_id  VARCHAR(512) NOT NULL,
+    jti        VARCHAR(256) NOT NULL,
+    expires_at TIMESTAMPTZ  NOT NULL,
+    PRIMARY KEY (client_id, jti)
+);
+CREATE INDEX IF NOT EXISTS ix_identity_oauth_assertions_exp ON identity_oauth_assertions (expires_at);

@@ -15,6 +15,7 @@ tokens for your API. It implements the profile required by the
 | RFC 8707 | `resource` → access-token `aud`; tokens for one resource are rejected by another |
 | RFC 7591 | Dynamic Client Registration (rate-limited per IP; stale clients GC'd) |
 | CIMD | `client_id` as an https URL to a Client ID Metadata Document (SSRF-hardened fetch) |
+| RFC 7523 §2.2 | `private_key_jwt` client authentication for CIMD clients (RS256/ES256, `jwks_uri` or inline `jwks`, `jti` replay protection) |
 | RFC 8252 | loopback redirects: any port on `127.0.0.1` / `[::1]` / `localhost` |
 | RFC 7009 | token revocation (always 200) |
 | RFC 9207 | `iss` in the authorization response |
@@ -160,11 +161,56 @@ an app CORS layer exposing `Mcp-Session-Id` keeps working.
 - **CIMD** (`AllowCIMD`): an https `client_id` URL is fetched with no
   redirects, a 5 KB cap and 5 s timeout; special-use/private IP ranges are
   blocked **at dial time** (defeats DNS rebinding), no proxy; the document's
-  `client_id` must equal the URL; only `token_endpoint_auth_method: none`. Cached
-  per `Cache-Control` (bounded), errors never cached. `CIMDFetcher.AllowPrivateNetworks`
+  `client_id` must equal the URL. `token_endpoint_auth_method` is `none` or
+  `private_key_jwt` (below); shared-secret methods (`client_secret_*`) and
+  `client_secret` are refused, as the draft requires. Cached per
+  `Cache-Control` (bounded), errors never cached. `CIMDFetcher.AllowPrivateNetworks`
   exists for tests only.
 - **Pre-registered clients**: `srv.RegisterClient(ctx, oauth.ClientMetadata{…})`
   from your own code (same validation as DCR).
+
+### `private_key_jwt` (CIMD clients such as ChatGPT)
+
+ChatGPT identifies itself with `https://chatgpt.com/oauth/client.json`, which
+declares `token_endpoint_auth_method: "private_key_jwt"`,
+`token_endpoint_auth_signing_alg: "RS256"` and a `jwks_uri`. As the CIMD draft
+(§8.2) requires, such a client must then authenticate **every** token and
+revocation request with an RFC 7523 §2.2 client assertion — PKCE alone is not
+accepted:
+
+```
+client_assertion_type=urn:ietf:params:oauth:client-assertion-type:jwt-bearer
+client_assertion=<JWT signed by the client>
+```
+
+The server checks:
+
+- **keys**: the document's `jwks_uri` (https, fetched with the same SSRF
+  protections as the document, 64 KB cap, cached per `Cache-Control`, re-fetched
+  when an assertion names an unknown `kid` — key rotation — at most every
+  `CIMDFetcher.JWKSMinRefresh`) or inline `jwks` (exactly one of the two;
+  private key material is refused). RSA keys must be ≥ 2048 bits; EC keys P-256.
+- **algorithm**: RS256 or ES256 (`AssertionSigningAlgs`); pinned to the
+  document's `token_endpoint_auth_signing_alg` when declared. `none` and HMAC
+  are never accepted.
+- **claims**: `iss` = `sub` = the `client_id` (and = the `client_id` form
+  parameter when sent); `aud` contains the issuer or the token endpoint URL (the
+  revocation endpoint URL is also accepted there); `exp` required, not past and
+  at most `Options.ClientAssertionMaxLifetime` ahead (default 1 h); `iat`/`nbf`
+  not in the future (30 s leeway).
+- **replay**: `jti` is required and each (client, `jti`) is accepted once,
+  recorded in the store (`identity_oauth_assertions`) until the assertion
+  expires — so a replay is refused on every instance sharing the database.
+  `PurgeExpired` removes expired ids.
+
+Failures answer `401 invalid_client` with a specific `error_description`
+(expired, wrong `aud`, signature/algorithm, unknown key, already used, …).
+Metadata advertises `private_key_jwt` in
+`token_endpoint_auth_methods_supported` / `revocation_endpoint_auth_methods_supported`
+and `token_endpoint_auth_signing_alg_values_supported` /
+`revocation_endpoint_auth_signing_alg_values_supported` when `AllowCIMD` is on.
+DCR and pre-registered clients keep `none` / `client_secret_*` (a stored client
+has no key set).
 
 ## Connected apps and housekeeping
 
@@ -174,7 +220,7 @@ srv.RevokeGrant(ctx, userID, grantID)          // one connection
 srv.RevokeClient(ctx, userID, clientID)        // all grants + remembered consent
 
 // From a periodic job:
-srv.PurgeExpired(ctx)                                       // expired codes + grants
+srv.PurgeExpired(ctx)                                       // expired codes, grants, assertion ids
 srv.PurgeStaleClients(ctx, time.Now().Add(-30*24*time.Hour)) // unused DCR clients with no grants
 ```
 
@@ -190,11 +236,14 @@ authorize endpoint is a top-level browser navigation and has no CORS.
 
 `oauth/oauthtest` exports `RunStoreConformance` and `RunEndToEnd` (full flow
 through the HTTP handlers: PKCE, rotation/reuse, replay, loopback, confidential
-clients, audience separation, stamp revocation, challenge/step-up, scope
-narrowing, connected apps, purge). Run them against a custom `oauth.Store`.
+clients, `private_key_jwt` CIMD clients (jwks_uri + RS256 and inline jwks +
+ES256, key rotation, every rejection case), audience separation, stamp
+revocation, challenge/step-up, scope narrowing, connected apps, purge). Run them
+against a custom `oauth.Store`.
 
 ## Not included
 
 OpenID Connect (ID tokens, `/.well-known/openid-configuration`, userinfo),
-the client-credentials and device grants, token introspection, and
-`private_key_jwt` client authentication.
+the client-credentials and device grants, token introspection, `private_key_jwt`
+for DCR/pre-registered clients, and revoking a CIMD client's tokens when its
+published keys change (draft §8.4.1 leaves that to the server's risk policy).

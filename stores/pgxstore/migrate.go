@@ -214,5 +214,15 @@ CREATE INDEX IF NOT EXISTS %s ON %s (client_id);
 CREATE INDEX IF NOT EXISTS %s ON %s (expires_at);
 `, OG, U, ix("ix", n.Tables.OAuthGrants, "user"), OG, ix("ix", n.Tables.OAuthGrants, "client"), OG, ix("ix", n.Tables.OAuthGrants, "exp"), OG)
 
+	OA := n.Qualify(n.Tables.OAuthAssertions)
+	fmt.Fprintf(&b, `CREATE TABLE IF NOT EXISTS %s (
+	client_id  varchar(512) NOT NULL,
+	jti        varchar(256) NOT NULL,
+	expires_at timestamptz  NOT NULL,
+	PRIMARY KEY (client_id, jti)
+);
+CREATE INDEX IF NOT EXISTS %s ON %s (expires_at);
+`, OA, ix("ix", n.Tables.OAuthAssertions, "exp"), OA)
+
 	return b.String()
 }

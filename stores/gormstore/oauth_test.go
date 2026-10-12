@@ -12,12 +12,26 @@ import (
 	"gorm.io/gorm/logger"
 )
 
-func oauthEnv(t *testing.T) (oauth.Store, *identity.UserManager) {
+// openMemDB opens an in-memory SQLite database. Every new connection to
+// ":memory:" is a separate, empty database, so the pool is pinned to one
+// connection (the conformance suite calls the store concurrently).
+func openMemDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Discard})
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("db: %v", err)
+	}
+	sqlDB.SetMaxOpenConns(1)
+	return db
+}
+
+func oauthEnv(t *testing.T) (oauth.Store, *identity.UserManager) {
+	t.Helper()
+	db := openMemDB(t)
 	if err := gormstore.Migrate(db); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
@@ -32,10 +46,7 @@ func TestOAuthEndToEnd(t *testing.T) { oauthtest.RunEndToEnd(t, oauthEnv) }
 // prefix, proving the OAuth tables honor WithTablePrefix like the others.
 func TestOAuthCustomNaming(t *testing.T) {
 	oauthtest.RunStoreConformance(t, func(t *testing.T) (oauth.Store, *identity.UserManager) {
-		db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Discard})
-		if err != nil {
-			t.Fatalf("open: %v", err)
-		}
+		db := openMemDB(t)
 		opt := gormstore.WithTablePrefix("app_")
 		if err := gormstore.Migrate(db, opt); err != nil {
 			t.Fatalf("migrate: %v", err)

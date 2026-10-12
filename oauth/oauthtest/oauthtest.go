@@ -7,6 +7,8 @@ package oauthtest
 import (
 	"context"
 	"errors"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -213,6 +215,51 @@ func RunStoreConformance(t *testing.T, newEnv EnvFactory) {
 		}
 		if err := st.DeleteGrant(ctx, "missing"); err != nil {
 			t.Fatalf("deleting a missing grant must be a no-op, got %v", err)
+		}
+	})
+
+	t.Run("ClientAssertions", func(t *testing.T) {
+		ctx := context.Background()
+		st, _ := newEnv(t)
+		now := time.Now().UTC().Truncate(time.Second)
+		client, other, jti := "https://"+uniq("c")+".example/client.json", "https://"+uniq("o")+".example/client.json", uniq("jti")
+		ok, err := st.UseClientAssertion(ctx, client, jti, now.Add(time.Minute))
+		if err != nil || !ok {
+			t.Fatalf("first use must be accepted: %v %v", ok, err)
+		}
+		if ok, err := st.UseClientAssertion(ctx, client, jti, now.Add(time.Minute)); err != nil || ok {
+			t.Fatalf("a replayed (client, jti) must be refused: %v %v", ok, err)
+		}
+		if ok, err := st.UseClientAssertion(ctx, other, jti, now.Add(time.Minute)); err != nil || !ok {
+			t.Fatalf("the same jti from another client is distinct: %v %v", ok, err)
+		}
+		// Exactly one of many concurrent uses wins (atomic insert-or-ignore).
+		race := uniq("race")
+		var wins atomic.Int32
+		var wg sync.WaitGroup
+		for i := 0; i < 8; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				if ok, err := st.UseClientAssertion(ctx, client, race, now.Add(time.Minute)); err == nil && ok {
+					wins.Add(1)
+				}
+			}()
+		}
+		wg.Wait()
+		if wins.Load() != 1 {
+			t.Fatalf("concurrent uses of one assertion: %d accepted, want exactly 1", wins.Load())
+		}
+		old := uniq("old")
+		if ok, err := st.UseClientAssertion(ctx, client, old, now.Add(-time.Minute)); err != nil || !ok {
+			t.Fatalf("record expiring assertion: %v %v", ok, err)
+		}
+		n, err := st.DeleteExpiredClientAssertions(ctx, now)
+		if err != nil || n < 1 {
+			t.Fatalf("DeleteExpiredClientAssertions: n=%d err=%v", n, err)
+		}
+		if ok, err := st.UseClientAssertion(ctx, client, jti, now.Add(time.Minute)); err != nil || ok {
+			t.Fatalf("purging expired ids must keep live ones: %v %v", ok, err)
 		}
 	})
 

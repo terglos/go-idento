@@ -36,12 +36,12 @@ type harness struct {
 	clock   time.Duration // added to time.Now (purge tests)
 }
 
-func newHarness(t *testing.T, newEnv EnvFactory) *harness {
+func newHarness(t *testing.T, newEnv EnvFactory, mutate ...func(*oauth.Options)) *harness {
 	t.Helper()
 	st, um := newEnv(t)
 	tokens := identity.NewTokenService(um, identity.DefaultTokenOptions([]byte("oauth-e2e-signing-key-00000000000"), "go-idento", "app"))
 	h := &harness{t: t, um: um, tokens: tokens}
-	srv, err := oauth.NewServer(um, tokens, st, oauth.Options{
+	opts := oauth.Options{
 		Issuer:        issuer,
 		Resources:     []string{resourceA, resourceB},
 		Scopes:        []string{"read", "write", oauth.ScopeOfflineAccess},
@@ -60,7 +60,11 @@ func newHarness(t *testing.T, newEnv EnvFactory) *harness {
 			_, _ = w.Write([]byte("consent page"))
 		},
 		Now: func() time.Time { return time.Now().Add(h.clock) },
-	})
+	}
+	for _, m := range mutate {
+		m(&opts)
+	}
+	srv, err := oauth.NewServer(um, tokens, st, opts)
 	if err != nil {
 		t.Fatalf("NewServer: %v", err)
 	}
@@ -517,6 +521,9 @@ func RunEndToEnd(t *testing.T, newEnv EnvFactory) {
 		wantOAuthError(t, h.token(url.Values{"grant_type": {"refresh_token"}, "refresh_token": {tok2["refresh_token"].(string)},
 			"client_id": {clientID}, "scope": {"read write offline_access"}}, "", ""), http.StatusBadRequest, "invalid_scope")
 	})
+
+	t.Run("PrivateKeyJWTMetadataDocumentClient", func(t *testing.T) { runPrivateKeyJWT(t, newEnv) })
+	t.Run("PrivateKeyJWTInlineKeysES256", func(t *testing.T) { runPrivateKeyJWTInline(t, newEnv) })
 
 	t.Run("ConnectedAppsAndPurge", func(t *testing.T) {
 		ctx := context.Background()
